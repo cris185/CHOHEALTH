@@ -1,0 +1,37 @@
+/* UI Builder offcanvas panel */
+#uiBuilderOffcanvas {
+    width: 320px;
+    z-index: 1060;
+    background-color: var(--bs-body-bg);
+}
+
+#uiBuilderOffcanvas .offcanvas-body {
+    padding: 1rem;
+}
+
+/* Color picker squares in UI builder */
+#uiBuilderOffcanvas .menu-items div {
+    width: 28px;
+    height: 28px;
+    margin: 3px;
+    border-radius: 4px;
+    cursor: pointer;
+    opacity: 0.7;
+    transition: opacity 0.2s;
+}
+
+#uiBuilderOffcanvas .menu-items div:hover,
+#uiBuilderOffcanvas .menu-items div.active {
+    opacity: 1;
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 1px;
+}
+
+#uiBuilderOffcanvas .menu-items div.inactive {
+    opacity: 0.5;
+}
+
+/* Breadcrumb padding fix */
+ol.breadcrumb {
+    padding: 0.75rem 1rem !important;
+}
