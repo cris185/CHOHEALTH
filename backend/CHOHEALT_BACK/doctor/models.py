@@ -32,6 +32,41 @@ class Doctor(models.Model):
         return f'Dr. {self.first_name} {self.first_last_name} - {self.specialization}'
 
 
+SHIFT_TYPE = (
+    ('Day', 'Day'),
+    ('Night', 'Night'),
+)
+
+DAY_OF_WEEK = (
+    (0, 'Monday'),
+    (1, 'Tuesday'),
+    (2, 'Wednesday'),
+    (3, 'Thursday'),
+    (4, 'Friday'),
+    (5, 'Saturday'),
+    (6, 'Sunday'),
+)
+
+
+class DoctorSchedule(models.Model):
+    sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
+    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='schedules')
+    day_of_week = models.IntegerField(choices=DAY_OF_WEEK)
+    shift_type = models.CharField(max_length=10, choices=SHIFT_TYPE, default='Day')
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    break_start = models.TimeField(null=True, blank=True)
+    break_end = models.TimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        unique_together = ('doctor', 'day_of_week', 'shift_type')
+        ordering = ['day_of_week', 'start_time']
+
+    def __str__(self):
+        return f'Dr. {self.doctor.first_name} {self.doctor.first_last_name} - {self.get_day_of_week_display()} ({self.shift_type}) {self.start_time}-{self.end_time}'
+
+
 NOTIFICATION_TYPE = (
     ('New Appointment', 'New Appointment'),
     ('Appointment Cancelled', 'Appointment Cancelled'),

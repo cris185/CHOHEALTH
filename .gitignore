@@ -4,6 +4,10 @@
 
 #venv
 healthvenv/
+AGENTS.md
+CLAUDE.md
+
+#claude
 
 ### Django ###
 *.log

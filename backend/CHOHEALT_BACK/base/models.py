@@ -31,6 +31,7 @@ class Service(models.Model):
     sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
+    image = models.FileField(upload_to='service_images', default='default/default-service.jpg', blank=True)
     cost = models.DecimalField(max_digits=10, decimal_places=2)
     duration_minutes = models.PositiveIntegerField(default=30)
     is_active = models.BooleanField(default=True)
