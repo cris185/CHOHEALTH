@@ -14,7 +14,7 @@ export default function PatientServicesPage() {
   useEffect(() => {
     if (!loading && !user) router.push('/login');
     if (!loading && user && user.user_type !== 'Patient') router.push('/dashboard');
-  }, [user, loading, router]);
+  }, [user, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (loading || !user) {
     return (

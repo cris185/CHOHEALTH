@@ -4,14 +4,25 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import {
-  appointments as appointmentsApi,
-  doctors as doctorsApi,
-  DoctorAppointmentItem,
-  DoctorScheduleEntry,
-} from '@/lib/api';
+import { appointments as appointmentsApi, doctors as doctorsApi, DoctorAppointmentItem, DoctorScheduleEntry } from '@/lib/api';
+import { Card, CardContent } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import DoctorDayCalendar from '@/components/booking/DoctorDayCalendar';
 import AppointmentDetailModal from '@/components/booking/AppointmentDetailModal';
+import { CalendarDays } from 'lucide-react';
+
+const statusVariant: Record<string, string> = {
+  Pending: 'bg-blue-50 text-blue-700 border-blue-200',
+  'Pending Payment': 'bg-amber-50 text-amber-700 border-amber-200',
+  Confirmed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Completed: 'bg-slate-100 text-slate-600 border-slate-200',
+  Cancelled: 'bg-red-50 text-red-700 border-red-200',
+  'No Show': 'bg-orange-50 text-orange-700 border-orange-200',
+};
 
 export default function DoctorAppointmentsPage() {
   const { user, loading: authLoading } = useAuth();
@@ -25,17 +36,17 @@ export default function DoctorAppointmentsPage() {
   const [modalSid, setModalSid] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!authLoading && !user) router.push('/login');
-    if (!authLoading && user && user.user_type !== 'Doctor') router.push('/dashboard');
-  }, [user, authLoading, router]);
+    if (authLoading) return;
+    if (!user) { router.push('/login'); return; }
+    if (user.user_type !== 'Doctor') { router.replace('/dashboard'); return; }
+  }, [user, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (user?.sid) {
       doctorsApi.schedule(user.sid).then((schedules) => {
         const dayOfWeek = new Date(selectedDate + 'T00:00:00').getDay();
         const pythonDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        const todaySchedule = schedules.find((s) => s.day_of_week === pythonDay);
-        setSchedule(todaySchedule || null);
+        setSchedule(schedules.find((s) => s.day_of_week === pythonDay) || null);
       }).catch(() => setSchedule(null));
     }
   }, [user, selectedDate]);
@@ -44,110 +55,80 @@ export default function DoctorAppointmentsPage() {
     if (user) {
       setApptLoading(true);
       const token = localStorage.getItem('access_token') || '';
-      appointmentsApi.doctorList(token, selectedDate)
-        .then(setAppts)
-        .catch(() => setAppts([]))
-        .finally(() => setApptLoading(false));
+      appointmentsApi.doctorList(token, selectedDate).then(setAppts).catch(() => setAppts([])).finally(() => setApptLoading(false));
     }
   }, [user, selectedDate]);
 
-  if (authLoading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-gray-500">{t('common.loading')}</p>
-      </div>
-    );
-  }
+  if (authLoading || !user) return null;
 
   return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
-      <h2 className="mb-6 text-2xl font-bold text-gray-900">{t('dashboard.doctor.nav.appointments')}</h2>
-
-      <div className="mb-4 flex items-center gap-4">
-        <input
-          type="date"
-          value={selectedDate}
-          onChange={(e) => setSelectedDate(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
-        <button
-          onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-          className="rounded-md bg-blue-100 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-200"
-        >
-          {t('booking.today')}
-        </button>
-        <span className="text-sm text-gray-500">
-          {appts.length} appointment(s)
-        </span>
+    <div className="mx-auto max-w-7xl px-6 py-8">
+      <div className="mb-6 flex items-center gap-3">
+        <CalendarDays className="h-6 w-6 text-primary" />
+        <h2 className="text-2xl font-bold tracking-tight">{t('dashboard.doctor.nav.appointments')}</h2>
       </div>
 
-      {schedule ? (
-        <DoctorDayCalendar
-          date={selectedDate}
-          appointments={appts}
-          scheduleStart={schedule.start_time}
-          scheduleEnd={schedule.end_time}
-          breakStart={schedule.break_start}
-          breakEnd={schedule.break_end}
-          onAppointmentClick={setModalSid}
-          loading={apptLoading}
-        />
-      ) : (
-        <div className="rounded-lg bg-white p-8 shadow text-center">
-          <p className="text-gray-500">{t('booking.noSchedule')}</p>
-        </div>
-      )}
+      <div className="mb-6 flex items-center gap-3">
+        <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-auto" />
+        <Button variant="outline" size="sm" onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}>
+          {t('booking.today')}
+        </Button>
+        <span className="text-sm text-muted-foreground">{appts.length} appointment(s)</span>
+      </div>
 
-      {/* Appointment list below calendar */}
+      {/* Calendar view */}
+      <Card className="mb-8">
+        <CardContent className="p-6">
+          {schedule ? (
+            <DoctorDayCalendar
+              date={selectedDate}
+              appointments={appts}
+              scheduleStart={schedule.start_time}
+              scheduleEnd={schedule.end_time}
+              breakStart={schedule.break_start}
+              breakEnd={schedule.break_end}
+              onAppointmentClick={setModalSid}
+              loading={apptLoading}
+            />
+          ) : (
+            <div className="py-12 text-center text-muted-foreground">{t('booking.noSchedule')}</div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* List view */}
       {!apptLoading && appts.length > 0 && (
-        <div className="mt-8">
-          <h3 className="mb-4 text-lg font-semibold text-gray-800">Appointment List</h3>
-          <div className="overflow-hidden rounded-lg bg-white shadow">
-            <table className="w-full text-sm">
-              <thead className="border-b bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Time</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Patient</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Service</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Mode</th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-500">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y">
-                {appts.map((a) => {
-                  const time = a.date.split('T')[1]?.substring(0, 5) || '';
-                  const statusColors: Record<string, string> = {
-                    Pending: 'bg-blue-100 text-blue-700',
-                    Confirmed: 'bg-green-100 text-green-700',
-                    Completed: 'bg-gray-100 text-gray-600',
-                    Cancelled: 'bg-red-100 text-red-700',
-                    'No Show': 'bg-orange-100 text-orange-700',
-                  };
-                  return (
-                    <tr key={a.sid} className="hover:bg-gray-50 cursor-pointer" onClick={() => setModalSid(a.sid)}>
-                      <td className="px-4 py-3 font-medium text-gray-900">{time}</td>
-                      <td className="px-4 py-3 text-gray-900">{a.patient_name}</td>
-                      <td className="px-4 py-3 text-gray-600">{a.service_name || '-'}</td>
-                      <td className="px-4 py-3 text-gray-600">{a.mode}</td>
-                      <td className="px-4 py-3">
-                        <span className={`rounded-full px-2 py-1 text-xs font-medium ${statusColors[a.status] || ''}`}>
-                          {a.status}
-                        </span>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
+        <Card>
+          <CardContent className="p-0">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Patient</TableHead>
+                  <TableHead>Service</TableHead>
+                  <TableHead>Mode</TableHead>
+                  <TableHead>Status</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {appts.map((a) => (
+                  <TableRow key={a.sid} className="cursor-pointer" onClick={() => setModalSid(a.sid)}>
+                    <TableCell className="font-medium">{a.date.split('T')[1]?.substring(0, 5) || ''}</TableCell>
+                    <TableCell>{a.patient_name}</TableCell>
+                    <TableCell>{a.service_name || '-'}</TableCell>
+                    <TableCell>{a.mode}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={statusVariant[a.status] || ''}>{a.status}</Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
       )}
 
-      <AppointmentDetailModal
-        isOpen={!!modalSid}
-        onClose={() => setModalSid(null)}
-        appointmentSid={modalSid}
-      />
+      <AppointmentDetailModal isOpen={!!modalSid} onClose={() => setModalSid(null)} appointmentSid={modalSid} />
     </div>
   );
 }

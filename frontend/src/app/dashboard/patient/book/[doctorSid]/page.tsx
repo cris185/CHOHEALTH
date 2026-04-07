@@ -40,7 +40,7 @@ export default function BookingPage() {
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
     if (!authLoading && user && user.user_type !== 'Patient') router.push('/dashboard');
-  }, [user, authLoading, router]);
+  }, [user, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load service + find doctor
   useEffect(() => {
@@ -180,6 +180,7 @@ export default function BookingPage() {
           doctorName={`Dr. ${selectedDoctor.full_name}`}
           serviceName={service.name}
           serviceDuration={service.duration_minutes}
+          serviceCost={service.cost}
         />
       </main>
     </div>

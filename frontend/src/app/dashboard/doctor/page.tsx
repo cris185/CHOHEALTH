@@ -4,6 +4,7 @@ import { useAuth } from '@/context/AuthContext';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
 import {
   appointments as appointmentsApi,
   doctors as doctorsApi,
@@ -12,8 +13,25 @@ import {
   DoctorScheduleEntry,
   DoctorStats,
 } from '@/lib/api';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Input } from '@/components/ui/input';
 import DoctorDayCalendar from '@/components/booking/DoctorDayCalendar';
 import AppointmentDetailModal from '@/components/booking/AppointmentDetailModal';
+import { CalendarDays, Clock, CheckCircle, Archive, Users, Star, DollarSign, Bell, Activity, Stethoscope } from 'lucide-react';
+import Link from 'next/link';
+
+const container = { hidden: {}, show: { transition: { staggerChildren: 0.05 } } };
+const item = { hidden: { opacity: 0, y: 20 }, show: { opacity: 1, y: 0, transition: { duration: 0.4 } } };
+
+const statusVariant: Record<string, string> = {
+  Pending: 'bg-blue-50 text-blue-700 border-blue-200',
+  Confirmed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+  Completed: 'bg-slate-100 text-slate-600 border-slate-200',
+  Cancelled: 'bg-red-50 text-red-700 border-red-200',
+};
 
 export default function DoctorDashboard() {
   const { user, loading } = useAuth();
@@ -28,11 +46,11 @@ export default function DoctorDashboard() {
   const [modalSid, setModalSid] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!loading && !user) router.push('/login');
-    if (!loading && user && user.user_type !== 'Doctor') router.push('/dashboard');
-  }, [user, loading, router]);
+    if (loading) return;
+    if (!user) { router.push('/login'); return; }
+    if (user.user_type !== 'Doctor') { router.replace('/dashboard'); return; }
+  }, [user, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load stats
   useEffect(() => {
     if (user) {
       const token = localStorage.getItem('access_token') || '';
@@ -40,114 +58,205 @@ export default function DoctorDashboard() {
     }
   }, [user]);
 
-  // Load schedule for selected day
   useEffect(() => {
     if (user?.sid) {
       doctorsApi.schedule(user.sid).then((schedules) => {
         const dayOfWeek = new Date(selectedDate + 'T00:00:00').getDay();
         const pythonDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-        const todaySchedule = schedules.find((s) => s.day_of_week === pythonDay);
-        setSchedule(todaySchedule || null);
+        setSchedule(schedules.find((s) => s.day_of_week === pythonDay) || null);
       }).catch(() => setSchedule(null));
     }
   }, [user, selectedDate]);
 
-  // Load appointments for selected date
   useEffect(() => {
     if (user) {
       setApptLoading(true);
       const token = localStorage.getItem('access_token') || '';
-      appointmentsApi.doctorList(token, selectedDate)
-        .then(setAppts)
-        .catch(() => setAppts([]))
-        .finally(() => setApptLoading(false));
+      appointmentsApi.doctorList(token, selectedDate).then(setAppts).catch(() => setAppts([])).finally(() => setApptLoading(false));
     }
   }, [user, selectedDate]);
 
   if (loading || !user) {
     return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-gray-500">{t('common.loading')}</p>
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        <Skeleton className="h-8 w-64 mb-2" />
+        <Skeleton className="h-5 w-40 mb-8" />
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {[...Array(8)].map((_, i) => <Skeleton key={i} className="h-32 rounded-2xl" />)}
+        </div>
       </div>
     );
   }
 
-  const statCards = [
-    { label: t('dashboard.doctor.appointmentsToday'), value: stats?.today_appointments ?? 0, color: 'bg-blue-100 text-blue-600', icon: 'M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z' },
-    { label: t('dashboard.doctor.upcoming'), value: stats?.pending_appointments ?? 0, color: 'bg-yellow-100 text-yellow-600', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
-    { label: t('dashboard.doctor.completed'), value: stats?.completed_appointments ?? 0, color: 'bg-green-100 text-green-600', icon: 'M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z' },
-    { label: t('dashboard.doctor.totalAppointments'), value: stats?.total_appointments ?? 0, color: 'bg-indigo-100 text-indigo-600', icon: 'M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10' },
-    { label: t('dashboard.doctor.patients'), value: stats?.total_patients ?? 0, color: 'bg-teal-100 text-teal-600', icon: 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z' },
-    { label: t('dashboard.doctor.averageRating'), value: stats?.average_rating ? `${stats.average_rating.toFixed(1)}/5` : t('dashboard.doctor.noRating'), color: 'bg-purple-100 text-purple-600', icon: 'M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z' },
-    { label: t('dashboard.doctor.totalRevenue'), value: `$${stats?.total_revenue ?? 0}`, color: 'bg-emerald-100 text-emerald-600', icon: 'M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
-    { label: t('dashboard.doctor.notifications'), value: stats?.unread_notifications ?? 0, color: 'bg-red-100 text-red-600', icon: 'M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9' },
+  const gradientCards = [
+    { label: t('dashboard.doctor.appointmentsToday'), value: stats?.today_appointments ?? 0, icon: CalendarDays, gradient: 'from-blue-500 to-indigo-600', desc: 'Scheduled for today' },
+    { label: t('dashboard.doctor.totalRevenue'), value: `$${stats?.total_revenue ?? 0}`, icon: DollarSign, gradient: 'from-emerald-500 to-teal-600', desc: 'Total earnings' },
+    { label: t('dashboard.doctor.patients'), value: stats?.total_patients ?? 0, icon: Users, gradient: 'from-violet-500 to-purple-600', desc: 'Unique patients' },
   ];
 
-  return (
-    <div className="mx-auto max-w-7xl px-4 py-8">
-        <h2 className="mb-6 text-2xl font-bold text-gray-900">{t('dashboard.doctor.title')}</h2>
+  const whiteCards = [
+    { label: t('dashboard.doctor.upcoming'), value: stats?.pending_appointments ?? 0, icon: Clock, color: 'text-amber-600 bg-amber-50' },
+    { label: t('dashboard.doctor.completed'), value: stats?.completed_appointments ?? 0, icon: CheckCircle, color: 'text-green-600 bg-green-50' },
+    { label: t('dashboard.doctor.totalAppointments'), value: stats?.total_appointments ?? 0, icon: Archive, color: 'text-indigo-600 bg-indigo-50' },
+    { label: t('dashboard.doctor.averageRating'), value: stats?.average_rating ? `${stats.average_rating.toFixed(1)}/5` : t('dashboard.doctor.noRating'), icon: Star, color: 'text-purple-600 bg-purple-50' },
+    { label: t('dashboard.doctor.notifications'), value: stats?.unread_notifications ?? 0, icon: Bell, color: 'text-rose-600 bg-rose-50' },
+  ];
 
-        {/* Stats Grid */}
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          {statCards.map((card) => (
-            <div key={card.label} className="rounded-lg bg-white p-5 shadow">
-              <div className="flex items-center gap-3">
-                <div className={`flex h-10 w-10 items-center justify-center rounded-full ${card.color.split(' ')[0]}`}>
-                  <svg className={`h-5 w-5 ${card.color.split(' ')[1]}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={card.icon} />
-                  </svg>
-                </div>
-                <div>
-                  <p className="text-xs text-gray-500">{card.label}</p>
-                  <p className="text-xl font-bold text-gray-900">{card.value}</p>
+  const todayAppts = appts.filter((a) => ['Pending', 'Confirmed'].includes(a.status));
+
+  return (
+    <div className="mx-auto max-w-7xl px-6 py-8">
+      {/* Header */}
+      <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="mb-8">
+        <div className="flex items-center gap-3 mb-1">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+            <Stethoscope className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">{t('dashboard.doctor.title')}</h2>
+            <p className="text-sm text-muted-foreground">Welcome back, <span className="font-medium text-foreground">Dr. {user.username}</span></p>
+          </div>
+        </div>
+      </motion.div>
+
+      {/* Gradient stat cards */}
+      <motion.div variants={container} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-3 mb-4">
+        {gradientCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <motion.div key={card.label} variants={item}>
+              <Card className={`bg-gradient-to-br ${card.gradient} border-0 text-white overflow-hidden relative group hover:shadow-lg transition-shadow duration-300`}>
+                <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -translate-y-8 translate-x-8" />
+                <div className="absolute bottom-0 left-0 w-24 h-24 bg-white/5 rounded-full translate-y-8 -translate-x-8" />
+                <CardContent className="p-6 relative">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-white/80">{card.label}</p>
+                      <p className="text-4xl font-bold mt-2 tracking-tight">{card.value}</p>
+                      <p className="text-xs text-white/60 mt-1">{card.desc}</p>
+                    </div>
+                    <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 group-hover:bg-white/20 transition-colors">
+                      <Icon className="h-7 w-7 text-white/80" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          );
+        })}
+      </motion.div>
+
+      {/* White stat cards */}
+      <motion.div variants={container} initial="hidden" animate="show" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5 mb-8">
+        {whiteCards.map((card) => {
+          const Icon = card.icon;
+          return (
+            <motion.div key={card.label} variants={item}>
+              <Card className="hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+                <CardContent className="p-4">
+                  <div className="flex items-center gap-3">
+                    <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${card.color} transition-transform`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <p className="text-[11px] text-muted-foreground">{card.label}</p>
+                      <p className="text-lg font-bold tracking-tight">{card.value}</p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          );
+        })}
+      </motion.div>
+
+      {/* Two column: Schedule + Today's Appointments */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Schedule Calendar */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lg:col-span-2">
+          <Card>
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-primary" />
+                  {t('dashboard.doctor.schedule')}
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-auto h-8 text-xs" />
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}>
+                    {t('booking.today')}
+                  </Button>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
+            </CardHeader>
+            <CardContent>
+              {schedule ? (
+                <DoctorDayCalendar
+                  date={selectedDate}
+                  appointments={appts}
+                  scheduleStart={schedule.start_time}
+                  scheduleEnd={schedule.end_time}
+                  breakStart={schedule.break_start}
+                  breakEnd={schedule.break_end}
+                  onAppointmentClick={setModalSid}
+                  loading={apptLoading}
+                />
+              ) : (
+                <div className="py-16 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                    <CalendarDays className="h-8 w-8 text-muted-foreground/50" />
+                  </div>
+                  <p className="mt-4 text-sm font-medium text-muted-foreground">{t('booking.noSchedule')}</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">Contact admin to set up your schedule</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </motion.div>
 
-        {/* Date picker + Calendar */}
-        <div className="mt-8">
-          <div className="mb-4 flex items-center gap-4">
-            <h3 className="text-lg font-semibold text-gray-800">{t('dashboard.doctor.schedule')}</h3>
-            <input
-              type="date"
-              value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
-              className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            />
-            <button
-              onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}
-              className="rounded-md bg-blue-100 px-3 py-2 text-sm font-medium text-blue-700 hover:bg-blue-200"
-            >
-              {t('booking.today')}
-            </button>
-          </div>
+        {/* Today's Appointments List */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+          <Card className="h-full">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-base">Today&apos;s Queue</CardTitle>
+                <Badge variant="secondary">{todayAppts.length}</Badge>
+              </div>
+            </CardHeader>
+            <CardContent className="p-0">
+              {todayAppts.length === 0 ? (
+                <div className="py-12 text-center">
+                  <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted">
+                    <CalendarDays className="h-8 w-8 text-muted-foreground/50" />
+                  </div>
+                  <p className="mt-4 text-sm font-medium text-muted-foreground">No appointments today</p>
+                  <p className="text-xs text-muted-foreground/70 mt-1">Enjoy your day off!</p>
+                </div>
+              ) : (
+                <div className="divide-y">
+                  {todayAppts.map((appt) => {
+                    const time = appt.date.split('T')[1]?.substring(0, 5) || '';
+                    return (
+                      <div key={appt.sid} className="flex items-center justify-between px-6 py-3.5 hover:bg-muted/30 transition-colors cursor-pointer" onClick={() => setModalSid(appt.sid)}>
+                        <div className="min-w-0">
+                          <p className="text-sm font-medium truncate">{appt.patient_name}</p>
+                          <p className="text-xs text-muted-foreground">{time} &middot; {appt.service_name}</p>
+                        </div>
+                        <Badge variant="outline" className={`shrink-0 ${statusVariant[appt.status] || ''}`}>{appt.status}</Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <div className="border-t p-3">
+                <Link href="/dashboard/doctor/appointments" className="text-xs text-primary hover:underline block text-center">View all appointments</Link>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+      </div>
 
-          {schedule ? (
-            <DoctorDayCalendar
-              date={selectedDate}
-              appointments={appts}
-              scheduleStart={schedule.start_time}
-              scheduleEnd={schedule.end_time}
-              breakStart={schedule.break_start}
-              breakEnd={schedule.break_end}
-              onAppointmentClick={setModalSid}
-              loading={apptLoading}
-            />
-          ) : (
-            <div className="rounded-lg bg-white p-8 shadow text-center">
-              <p className="text-gray-500">{t('booking.noSchedule')}</p>
-            </div>
-          )}
-        </div>
-
-        {/* Appointment Detail Modal */}
-        <AppointmentDetailModal
-          isOpen={!!modalSid}
-          onClose={() => setModalSid(null)}
-          appointmentSid={modalSid}
-        />
+      <AppointmentDetailModal isOpen={!!modalSid} onClose={() => setModalSid(null)} appointmentSid={modalSid} />
     </div>
   );
 }

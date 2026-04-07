@@ -46,6 +46,7 @@ class Service(models.Model):
 # ============================================================================
 
 APPOINTMENT_STATUS = (
+    ('Pending Payment', 'Pending Payment'),
     ('Pending', 'Pending'),
     ('Confirmed', 'Confirmed'),
     ('Completed', 'Completed'),

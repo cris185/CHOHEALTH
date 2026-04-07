@@ -25,7 +25,7 @@ export default function ServiceDetailPage() {
   useEffect(() => {
     if (!authLoading && !user) router.push('/login');
     if (!authLoading && user && user.user_type !== 'Patient') router.push('/dashboard');
-  }, [user, authLoading, router]);
+  }, [user, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (sid) {

@@ -4,6 +4,11 @@ import { useState } from 'react';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { useAuth } from '@/context/AuthContext';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Button } from '@/components/ui/button';
+import { Heart, Loader2 } from 'lucide-react';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -28,42 +33,65 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50 px-4">
-      <div className="w-full max-w-md space-y-8">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-blue-600">{t('common.appName')}</h1>
-          <p className="mt-2 text-gray-600">{t('login.title')}</p>
+    <div className="flex min-h-[calc(100vh-65px)] items-center justify-center bg-muted/30 px-4">
+      <div className="w-full max-w-md space-y-6">
+        <div className="flex flex-col items-center gap-2">
+          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
+            <Heart className="h-6 w-6 text-primary-foreground" />
+          </div>
+          <h1 className="text-2xl font-bold tracking-tight">{t('common.appName')}</h1>
+          <p className="text-sm text-muted-foreground">{t('login.title')}</p>
         </div>
 
-        <form onSubmit={handleSubmit} className="mt-8 space-y-6 rounded-lg bg-white p-8 shadow">
-          {error && (
-            <div className="rounded bg-red-50 p-3 text-sm text-red-600">{error}</div>
-          )}
+        <Card>
+          <form onSubmit={handleSubmit}>
+            <CardContent className="space-y-4 pt-6">
+              {error && (
+                <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">
+                  {error}
+                </div>
+              )}
 
-          <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700">{t('common.email')}</label>
-            <input id="email" type="email" required value={email} onChange={(e) => setEmail(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder={t('login.emailPlaceholder')} />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="email">{t('common.email')}</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder={t('login.emailPlaceholder')}
+                />
+              </div>
 
-          <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700">{t('common.password')}</label>
-            <input id="password" type="password" required value={password} onChange={(e) => setPassword(e.target.value)}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              placeholder={t('login.passwordPlaceholder')} />
-          </div>
+              <div className="space-y-2">
+                <Label htmlFor="password">{t('common.password')}</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  required
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder={t('login.passwordPlaceholder')}
+                />
+              </div>
+            </CardContent>
 
-          <button type="submit" disabled={loading}
-            className="w-full rounded-md bg-blue-600 px-4 py-2 text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50">
-            {loading ? t('login.submitting') : t('login.submit')}
-          </button>
+            <CardFooter className="flex flex-col gap-4">
+              <Button type="submit" className="w-full" disabled={loading}>
+                {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                {loading ? t('login.submitting') : t('login.submit')}
+              </Button>
 
-          <p className="text-center text-sm text-gray-600">
-            {t('login.noAccount')}{' '}
-            <Link href="/register" className="font-medium text-blue-600 hover:text-blue-500">{t('login.register')}</Link>
-          </p>
-        </form>
+              <p className="text-center text-sm text-muted-foreground">
+                {t('login.noAccount')}{' '}
+                <Link href="/register" className="font-medium text-primary hover:underline">
+                  {t('login.register')}
+                </Link>
+              </p>
+            </CardFooter>
+          </form>
+        </Card>
       </div>
     </div>
   );

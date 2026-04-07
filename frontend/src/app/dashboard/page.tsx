@@ -19,7 +19,7 @@ export default function DashboardRedirect() {
     } else {
       router.push('/dashboard/patient');
     }
-  }, [user, loading, router]);
+  }, [user, loading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="flex min-h-screen items-center justify-center">

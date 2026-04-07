@@ -5,6 +5,14 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
 import { doctorProfile as profileApi, DoctorProfile } from '@/lib/api';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import { Separator } from '@/components/ui/separator';
+import { User, Camera, Loader2, CheckCircle } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -23,22 +31,15 @@ export default function DoctorProfilePage() {
   const [imageFile, setImageFile] = useState<File | null>(null);
 
   const [form, setForm] = useState({
-    first_name: '',
-    second_name: '',
-    first_last_name: '',
-    second_last_name: '',
-    mobile: '',
-    country: '',
-    bio: '',
-    specialization: '',
-    qualification: '',
-    years_of_experience: 0,
+    first_name: '', second_name: '', first_last_name: '', second_last_name: '',
+    mobile: '', country: '', bio: '', specialization: '', qualification: '', years_of_experience: 0,
   });
 
   useEffect(() => {
-    if (!authLoading && !user) router.push('/login');
-    if (!authLoading && user && user.user_type !== 'Doctor') router.push('/dashboard');
-  }, [user, authLoading, router]);
+    if (authLoading) return;
+    if (!user) { router.push('/login'); return; }
+    if (user.user_type !== 'Doctor') { router.replace('/dashboard'); return; }
+  }, [user, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (user) {
@@ -46,20 +47,13 @@ export default function DoctorProfilePage() {
       profileApi.get(token).then((data) => {
         setProfile(data);
         setForm({
-          first_name: data.first_name,
-          second_name: data.second_name,
-          first_last_name: data.first_last_name,
-          second_last_name: data.second_last_name,
-          mobile: data.mobile,
-          country: data.country,
-          bio: data.bio,
-          specialization: data.specialization,
-          qualification: data.qualification,
+          first_name: data.first_name, second_name: data.second_name,
+          first_last_name: data.first_last_name, second_last_name: data.second_last_name,
+          mobile: data.mobile, country: data.country, bio: data.bio,
+          specialization: data.specialization, qualification: data.qualification,
           years_of_experience: data.years_of_experience,
         });
-        if (data.image) {
-          setImagePreview(data.image.startsWith('http') ? data.image : `${API_BASE}${data.image}`);
-        }
+        if (data.image) setImagePreview(data.image.startsWith('http') ? data.image : `${API_BASE}${data.image}`);
       }).catch(() => {}).finally(() => setLoading(false));
     }
   }, [user]);
@@ -71,169 +65,92 @@ export default function DoctorProfilePage() {
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setImageFile(file);
-      setImagePreview(URL.createObjectURL(file));
-    }
+    if (file) { setImageFile(file); setImagePreview(URL.createObjectURL(file)); }
   };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setError('');
-    setSuccess(false);
-    setSaving(true);
-
+    setError(''); setSuccess(false); setSaving(true);
     const token = localStorage.getItem('access_token') || '';
     const formData = new FormData();
-
-    Object.entries(form).forEach(([key, value]) => {
-      formData.append(key, String(value));
-    });
-
-    if (imageFile) {
-      formData.append('image', imageFile);
-    }
+    Object.entries(form).forEach(([key, value]) => formData.append(key, String(value)));
+    if (imageFile) formData.append('image', imageFile);
 
     try {
       const updated = await profileApi.update(formData, token);
-      setProfile(updated);
-      setSuccess(true);
-      setImageFile(null);
+      setProfile(updated); setSuccess(true); setImageFile(null);
       setTimeout(() => setSuccess(false), 3000);
     } catch (err: unknown) {
       const apiError = err as { data?: Record<string, string[]> };
-      if (apiError?.data) {
-        const messages = Object.values(apiError.data).flat().join(' ');
-        setError(messages || 'Error saving profile.');
-      } else {
-        setError('Error saving profile.');
-      }
-    } finally {
-      setSaving(false);
-    }
+      setError(apiError?.data ? Object.values(apiError.data).flat().join(' ') : 'Error saving profile.');
+    } finally { setSaving(false); }
   };
 
-  if (authLoading || loading || !user) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <p className="text-gray-500">{t('common.loading')}</p>
-      </div>
-    );
-  }
+  if (authLoading || loading || !user) return null;
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
-      <h2 className="mb-6 text-2xl font-bold text-gray-900">Edit Profile</h2>
+    <div className="mx-auto max-w-2xl px-6 py-8">
+      <div className="mb-6 flex items-center gap-3">
+        <User className="h-6 w-6 text-primary" />
+        <h2 className="text-2xl font-bold tracking-tight">Edit Profile</h2>
+      </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        {success && (
-          <div className="rounded-lg bg-green-50 p-3 text-sm text-green-700">Profile updated successfully.</div>
-        )}
-        {error && (
-          <div className="rounded-lg bg-red-50 p-3 text-sm text-red-600">{error}</div>
-        )}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center gap-6">
+            <div className="relative">
+              <Avatar className="h-20 w-20">
+                <AvatarImage src={imagePreview || undefined} />
+                <AvatarFallback className="text-xl">{form.first_name?.[0]}{form.first_last_name?.[0]}</AvatarFallback>
+              </Avatar>
+              <button type="button" onClick={() => fileInputRef.current?.click()}
+                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm hover:bg-primary/90">
+                <Camera className="h-3.5 w-3.5" />
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
+            </div>
+            <div>
+              <CardTitle>{profile?.full_name || 'Doctor'}</CardTitle>
+              <p className="text-sm text-muted-foreground">{profile?.email}</p>
+            </div>
+          </div>
+        </CardHeader>
 
-        {/* Image */}
-        <div className="flex items-center gap-6">
-          <div className="relative">
-            {imagePreview ? (
-              <img src={imagePreview} alt="Profile" className="h-24 w-24 rounded-full object-cover" />
-            ) : (
-              <div className="flex h-24 w-24 items-center justify-center rounded-full bg-blue-100">
-                <svg className="h-12 w-12 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                </svg>
+        <Separator />
+
+        <form onSubmit={handleSubmit}>
+          <CardContent className="space-y-4 pt-6">
+            {success && (
+              <div className="flex items-center gap-2 rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700">
+                <CheckCircle className="h-4 w-4" /> Profile updated successfully.
               </div>
             )}
-          </div>
-          <div>
-            <button type="button" onClick={() => fileInputRef.current?.click()}
-              className="rounded-md bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-300 hover:bg-gray-50">
-              Change Photo
-            </button>
-            <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageChange} />
-            <p className="mt-1 text-xs text-gray-500">JPG, PNG. Max 5MB.</p>
-          </div>
-        </div>
+            {error && <div className="rounded-lg border border-destructive/50 bg-destructive/10 p-3 text-sm text-destructive">{error}</div>}
 
-        {/* Email (read-only) */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700">Email</label>
-          <input type="email" value={profile?.email || ''} disabled
-            className="mt-1 block w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-gray-500" />
-        </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>{t('common.firstName')} *</Label><Input name="first_name" required value={form.first_name} onChange={handleChange} /></div>
+              <div className="space-y-2"><Label>{t('common.secondName')}</Label><Input name="second_name" value={form.second_name} onChange={handleChange} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>{t('common.firstLastName')} *</Label><Input name="first_last_name" required value={form.first_last_name} onChange={handleChange} /></div>
+              <div className="space-y-2"><Label>{t('common.secondLastName')}</Label><Input name="second_last_name" value={form.second_last_name} onChange={handleChange} /></div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Phone</Label><Input name="mobile" value={form.mobile} onChange={handleChange} /></div>
+              <div className="space-y-2"><Label>Country</Label><Input name="country" value={form.country} onChange={handleChange} /></div>
+            </div>
+            <div className="space-y-2"><Label>Specialization *</Label><Input name="specialization" required value={form.specialization} onChange={handleChange} /></div>
+            <div className="space-y-2"><Label>Qualifications *</Label><Input name="qualification" required value={form.qualification} onChange={handleChange} /></div>
+            <div className="space-y-2"><Label>Years of Experience</Label><Input name="years_of_experience" type="number" min={0} value={form.years_of_experience} onChange={handleChange} /></div>
+            <div className="space-y-2"><Label>Biography</Label><Textarea name="bio" rows={4} value={form.bio} onChange={handleChange} /></div>
 
-        {/* Names */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="first_name" className="block text-sm font-medium text-gray-700">{t('common.firstName')} *</label>
-            <input id="first_name" name="first_name" required value={form.first_name} onChange={handleChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label htmlFor="second_name" className="block text-sm font-medium text-gray-700">{t('common.secondName')}</label>
-            <input id="second_name" name="second_name" value={form.second_name} onChange={handleChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-          </div>
-        </div>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="first_last_name" className="block text-sm font-medium text-gray-700">{t('common.firstLastName')} *</label>
-            <input id="first_last_name" name="first_last_name" required value={form.first_last_name} onChange={handleChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label htmlFor="second_last_name" className="block text-sm font-medium text-gray-700">{t('common.secondLastName')}</label>
-            <input id="second_last_name" name="second_last_name" value={form.second_last_name} onChange={handleChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-          </div>
-        </div>
-
-        {/* Contact */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="mobile" className="block text-sm font-medium text-gray-700">Phone</label>
-            <input id="mobile" name="mobile" value={form.mobile} onChange={handleChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-          </div>
-          <div>
-            <label htmlFor="country" className="block text-sm font-medium text-gray-700">Country</label>
-            <input id="country" name="country" value={form.country} onChange={handleChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-          </div>
-        </div>
-
-        {/* Professional */}
-        <div>
-          <label htmlFor="specialization" className="block text-sm font-medium text-gray-700">Specialization *</label>
-          <input id="specialization" name="specialization" required value={form.specialization} onChange={handleChange}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-        </div>
-
-        <div>
-          <label htmlFor="qualification" className="block text-sm font-medium text-gray-700">Qualifications *</label>
-          <input id="qualification" name="qualification" required value={form.qualification} onChange={handleChange}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-        </div>
-
-        <div>
-          <label htmlFor="years_of_experience" className="block text-sm font-medium text-gray-700">Years of Experience</label>
-          <input id="years_of_experience" name="years_of_experience" type="number" min={0} value={form.years_of_experience} onChange={handleChange}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-        </div>
-
-        <div>
-          <label htmlFor="bio" className="block text-sm font-medium text-gray-700">Biography</label>
-          <textarea id="bio" name="bio" rows={4} value={form.bio} onChange={handleChange}
-            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500" />
-        </div>
-
-        <button type="submit" disabled={saving}
-          className="w-full rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50">
-          {saving ? 'Saving...' : 'Save Changes'}
-        </button>
-      </form>
+            <Button type="submit" className="w-full" disabled={saving}>
+              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {saving ? 'Saving...' : 'Save Changes'}
+            </Button>
+          </CardContent>
+        </form>
+      </Card>
     </div>
   );
 }
