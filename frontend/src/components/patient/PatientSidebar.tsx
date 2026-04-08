@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Heart } from 'lucide-react';
+import Image from 'next/image';
+import { Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical } from 'lucide-react';
 
 const mainNav = [
   { key: 'dashboard', href: '/dashboard/patient', icon: Home, exact: true },
@@ -50,14 +51,8 @@ export default function PatientSidebar() {
   return (
     <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col">
       {/* Brand */}
-      <div className="flex items-center gap-2.5 px-6 py-5">
-        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
-          <Heart className="h-4.5 w-4.5 text-primary-foreground" />
-        </div>
-        <div>
-          <p className="text-sm font-bold tracking-tight">CHO Health</p>
-          <p className="text-[11px] text-muted-foreground">Patient Portal</p>
-        </div>
+      <div className="flex items-center gap-2.5 px-5 py-4">
+        <Image src="/logo.png" alt="CHO Health" width={200} height={70} className="h-18 w-auto" />
       </div>
 
       <Separator />

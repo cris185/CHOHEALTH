@@ -12,6 +12,7 @@ from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
+from userauths.services.email_service import send_appointment_confirmation_email
 
 from patient.permissions import IsPatient
 from base.models import Appointment, Service, Branch
@@ -216,6 +217,8 @@ class StripeVerifyPaymentView(APIView):
                         message=f'New appointment booked by {appointment.patient.full_name} for {appointment.service.name} on {appointment.date.strftime("%b %d, %Y at %I:%M %p")}',
                     )
 
+                    send_appointment_confirmation_email(appointment, invoice)
+
                 return Response({'detail': 'Payment verified and appointment confirmed.', 'status': 'Pending'})
             else:
                 return Response({'detail': 'Payment not completed yet.', 'payment_status': session.payment_status}, status=status.HTTP_402_PAYMENT_REQUIRED)
@@ -293,6 +296,8 @@ class StripeWebhookView(APIView):
             type='New Appointment',
             message=f'New appointment booked by {appointment.patient.full_name} for {appointment.service.name} on {appointment.date.strftime("%b %d, %Y at %I:%M %p")}',
         )
+
+        send_appointment_confirmation_email(appointment, invoice)
 
 
 class PayPalCreateOrderView(APIView):
@@ -396,6 +401,8 @@ class PayPalCaptureOrderView(APIView):
                 type='New Appointment',
                 message=f'New appointment booked by {appointment.patient.full_name} for {appointment.service.name} on {appointment.date.strftime("%b %d, %Y at %I:%M %p")}',
             )
+
+            send_appointment_confirmation_email(appointment, invoice)
 
             return Response({'detail': 'Payment successful.', 'appointment_sid': appointment.sid})
         else:

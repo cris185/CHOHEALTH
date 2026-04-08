@@ -7,8 +7,9 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import ServiceList from '@/components/ServiceList';
-import { Heart, CalendarDays, FileText, UserCheck, Star, ArrowRight } from 'lucide-react';
+import Image from 'next/image';
+import ServiceCarousel from '@/components/ServiceCarousel';
+import { CalendarDays, FileText, UserCheck, Star, ArrowRight } from 'lucide-react';
 
 export default function HomePage() {
   const t = useTranslations();
@@ -24,6 +25,11 @@ export default function HomePage() {
     { quote: t('home.testimonial1'), author: t('home.testimonial1Author'), role: t('home.testimonial1Role'), initials: 'SJ' },
     { quote: t('home.testimonial2'), author: t('home.testimonial2Author'), role: t('home.testimonial2Role'), initials: 'MC' },
     { quote: t('home.testimonial3'), author: t('home.testimonial3Author'), role: t('home.testimonial3Role'), initials: 'ER' },
+    { quote: t('home.testimonial4'), author: t('home.testimonial4Author'), role: t('home.testimonial4Role'), initials: 'JP' },
+    { quote: t('home.testimonial5'), author: t('home.testimonial5Author'), role: t('home.testimonial5Role'), initials: 'AM' },
+    { quote: t('home.testimonial6'), author: t('home.testimonial6Author'), role: t('home.testimonial6Role'), initials: 'LT' },
+    { quote: t('home.testimonial7'), author: t('home.testimonial7Author'), role: t('home.testimonial7Role'), initials: 'RW' },
+    { quote: t('home.testimonial8'), author: t('home.testimonial8Author'), role: t('home.testimonial8Role'), initials: 'MS' },
   ];
 
   return (
@@ -34,10 +40,9 @@ export default function HomePage() {
         <div className="relative mx-auto max-w-7xl px-4 py-24 lg:py-32">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 mb-6">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-white/20">
-                <Heart className="h-5 w-5" />
+              <div className="flex items-center">
+                <Image src="/logo.png" alt="CHO Health" width={280} height={100} className="h-28 w-auto brightness-0 invert" />
               </div>
-              <span className="text-sm font-medium text-white/80">{t('common.appName')}</span>
             </div>
             <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
               {t('home.hero')}
@@ -56,7 +61,7 @@ export default function HomePage() {
                     <Button size="lg" variant="secondary">{t('home.cta')} <ArrowRight className="ml-2 h-4 w-4" /></Button>
                   </Link>
                   <Link href="/login">
-                    <Button size="lg" variant="outline" className="border-white/30 text-white hover:bg-white/10 hover:text-white">{t('home.login')}</Button>
+                    <Button size="lg" className="bg-white/20 text-white border-2 border-white/40 hover:bg-white hover:text-primary">{t('home.login')}</Button>
                   </Link>
                 </>
               )}
@@ -113,35 +118,62 @@ export default function HomePage() {
         <div className="mx-auto max-w-7xl px-4">
           <h2 className="text-center text-3xl font-bold tracking-tight">{t('services.title')}</h2>
           <div className="mt-12">
-            <ServiceList showBookButton={!user} />
+            <ServiceCarousel showBookButton={!user} />
           </div>
         </div>
       </section>
 
-      {/* Testimonials */}
-      <section className="py-20">
-        <div className="mx-auto max-w-7xl px-4">
+      {/* Testimonials Marquee */}
+      <section className="py-20 overflow-hidden">
+        <style>{`
+          @keyframes scroll-left {
+            0% { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+          .marquee-track {
+            animation: scroll-left 45s linear infinite;
+          }
+          .marquee-container:hover .marquee-track {
+            animation-play-state: paused;
+          }
+        `}</style>
+
+        <div className="mx-auto max-w-7xl px-4 mb-12">
           <h2 className="text-center text-3xl font-bold tracking-tight">{t('home.testimonialsTitle')}</h2>
-          <div className="mt-12 grid gap-8 md:grid-cols-3">
-            {testimonials.map((item) => (
-              <Card key={item.author}>
-                <CardContent className="pt-6">
-                  <div className="flex gap-1 mb-4">
-                    {[...Array(5)].map((_, i) => <Star key={i} className="h-4 w-4 fill-amber-400 text-amber-400" />)}
-                  </div>
-                  <p className="text-sm text-muted-foreground italic">&ldquo;{item.quote}&rdquo;</p>
-                  <Separator className="my-4" />
-                  <div className="flex items-center gap-3">
-                    <Avatar className="h-10 w-10">
-                      <AvatarFallback className="bg-primary/10 text-primary text-xs">{item.initials}</AvatarFallback>
-                    </Avatar>
-                    <div>
-                      <p className="text-sm font-semibold">{item.author}</p>
-                      <p className="text-xs text-muted-foreground">{item.role}</p>
+        </div>
+
+        <div className="marquee-container relative">
+          <div className="pointer-events-none absolute left-0 top-0 z-10 h-full w-24" style={{ background: 'linear-gradient(to right, var(--background), transparent)' }} />
+          <div className="pointer-events-none absolute right-0 top-0 z-10 h-full w-24" style={{ background: 'linear-gradient(to left, var(--background), transparent)' }} />
+
+          <div className="marquee-track flex w-max">
+            {[...testimonials, ...testimonials].map((item, idx) => (
+              <div key={`${item.author}-${idx}`} className="w-[350px] shrink-0 px-3">
+                <Card className="h-[240px] flex flex-col transition-shadow hover:shadow-lg">
+                  <CardContent className="pt-6 flex flex-col flex-1">
+                    <div className="flex gap-0.5 mb-3">
+                      {[...Array(5)].map((_, i) => (
+                        <Star key={i} className="h-3.5 w-3.5 fill-amber-400 text-amber-400" />
+                      ))}
                     </div>
-                  </div>
-                </CardContent>
-              </Card>
+                    <p className="text-sm text-muted-foreground italic leading-relaxed flex-1 line-clamp-4">
+                      &ldquo;{item.quote}&rdquo;
+                    </p>
+                    <Separator className="my-3" />
+                    <div className="flex items-center gap-3">
+                      <Avatar className="h-9 w-9">
+                        <AvatarFallback className="bg-primary/10 text-primary text-xs font-semibold">
+                          {item.initials}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <p className="text-sm font-semibold">{item.author}</p>
+                        <p className="text-xs text-muted-foreground">{item.role}</p>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             ))}
           </div>
         </div>
@@ -162,12 +194,7 @@ export default function HomePage() {
       <footer className="border-t bg-card py-8">
         <div className="mx-auto max-w-7xl px-4">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-            <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <Heart className="h-4 w-4 text-primary-foreground" />
-              </div>
-              <span className="font-semibold">{t('common.appName')}</span>
-            </div>
+            <Image src="/logo.png" alt="CHO Health" width={180} height={60} className="h-16 w-auto" />
             <p className="text-sm text-muted-foreground">
               &copy; {new Date().getFullYear()} {t('common.appName')}. {t('home.footerCopyright')}
             </p>

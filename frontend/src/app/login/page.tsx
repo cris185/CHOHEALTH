@@ -8,7 +8,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Heart, Loader2 } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
+import Image from 'next/image';
 
 export default function LoginPage() {
   const { login } = useAuth();
@@ -36,9 +37,7 @@ export default function LoginPage() {
     <div className="flex min-h-[calc(100vh-65px)] items-center justify-center bg-muted/30 px-4">
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary">
-            <Heart className="h-6 w-6 text-primary-foreground" />
-          </div>
+          <Image src="/logo.png" alt="CHO Health" width={220} height={80} className="h-20 w-auto" />
           <h1 className="text-2xl font-bold tracking-tight">{t('common.appName')}</h1>
           <p className="text-sm text-muted-foreground">{t('login.title')}</p>
         </div>
@@ -65,7 +64,12 @@ export default function LoginPage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="password">{t('common.password')}</Label>
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="password">{t('common.password')}</Label>
+                  <Link href="/forgot-password" className="text-xs text-primary hover:underline">
+                    {t('login.forgotPassword')}
+                  </Link>
+                </div>
                 <Input
                   id="password"
                   type="password"
