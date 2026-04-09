@@ -18,7 +18,7 @@ export default function DoctorRegisterPage() {
   const [form, setForm] = useState({
     email: '', password: '', password_confirm: '',
     first_name: '', second_name: '', first_last_name: '', second_last_name: '',
-    mobile: '', country: '', bio: '', specialization: '', qualification: '', years_of_experience: 0,
+    mobile: '', country: '', bio: '', specialization: '', years_of_experience: 0,
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -105,10 +105,6 @@ export default function DoctorRegisterPage() {
                 <Input id="specialization" name="specialization" required value={form.specialization} onChange={handleChange} placeholder={t('register.doctor.specializationPlaceholder')} />
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="qualification">{t('register.doctor.qualification')} *</Label>
-                <Input id="qualification" name="qualification" required value={form.qualification} onChange={handleChange} placeholder={t('register.doctor.qualificationPlaceholder')} />
-              </div>
 
               <div className="space-y-2">
                 <Label htmlFor="years_of_experience">{t('register.doctor.yearsOfExperience')} *</Label>

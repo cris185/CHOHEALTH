@@ -5,20 +5,19 @@ from decimal import Decimal
 from django.conf import settings
 from django.utils import timezone
 from django.db import transaction
-from django.views.decorators.csrf import csrf_exempt
 from django.http import HttpResponse
 
 from rest_framework import status
 from rest_framework.response import Response
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
-from userauths.services.email_service import send_appointment_confirmation_email
 
 from patient.permissions import IsPatient
 from base.models import Appointment, Service, Branch
 from doctor.models import Doctor, Notification
+from .stripe_customer import get_or_create_stripe_customer
 from .models import Invoice, InvoiceLineItem, Payment
-from .services import recompute_invoice_balance
+from userauths.services.email_service import send_appointment_confirmation_email
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
 
@@ -28,11 +27,25 @@ paypalrestsdk.configure({
     "client_secret": settings.PAYPAL_CLIENT_SECRET,
 })
 
+FRONTEND_URL = settings.FRONTEND_URL
+
+
+def _create_appointment_notification(appointment):
+    """Create notification for doctor when appointment is booked."""
+    if appointment.doctor:
+        Notification.objects.create(
+            recipient=appointment.doctor.user,
+            type='New Appointment',
+            title='New Appointment Booked',
+            message=f'New appointment booked by {appointment.patient.full_name} for {appointment.service.name if appointment.service else "service"} on {appointment.date.strftime("%b %d, %Y at %I:%M %p")}',
+            appointment=appointment,
+        )
+
 
 class CreateAppointmentWithPaymentView(APIView):
     """
-    Creates an appointment with status 'Pending Payment' and returns
-    payment session URLs for Stripe and PayPal.
+    Creates an appointment with status 'Scheduled' and an Invoice.
+    Payment status is tracked separately via Invoice.
     """
     permission_classes = [IsPatient]
 
@@ -41,17 +54,24 @@ class CreateAppointmentWithPaymentView(APIView):
         data = request.data
         patient = request.user.patient
 
-        # Validate inputs
         try:
-            doctor = Doctor.objects.get(sid=data.get('doctor_sid'))
             service = Service.objects.get(sid=data.get('service_sid'))
-        except (Doctor.DoesNotExist, Service.DoesNotExist):
-            return Response({'detail': 'Doctor or service not found.'}, status=status.HTTP_400_BAD_REQUEST)
+        except Service.DoesNotExist:
+            return Response({'detail': 'Service not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not service.doctors.filter(pk=doctor.pk).exists():
-            return Response({'detail': 'This doctor does not offer this service.'}, status=status.HTTP_400_BAD_REQUEST)
+        doctor = None
+        if data.get('doctor_sid'):
+            try:
+                doctor = Doctor.objects.get(sid=data['doctor_sid'])
+            except Doctor.DoesNotExist:
+                return Response({'detail': 'Doctor not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Create appointment with Pending Payment status
+            if not service.doctors.filter(pk=doctor.pk).exists():
+                return Response({'detail': 'This doctor does not offer this service.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if service.service_type == 'Consultation' and not doctor:
+            return Response({'detail': 'Consultation services require a doctor.'}, status=status.HTTP_400_BAD_REQUEST)
+
         branch = None
         if data.get('mode') == 'In-Person' and data.get('branch_sid'):
             try:
@@ -69,10 +89,9 @@ class CreateAppointmentWithPaymentView(APIView):
             issues=data.get('issues', ''),
             symptoms=data.get('symptoms', ''),
             notes=data.get('notes', ''),
-            status='Pending Payment',
+            status='Scheduled',
         )
 
-        # Create invoice
         invoice = Invoice.objects.create(
             appointment=appointment,
             patient=patient,
@@ -101,7 +120,7 @@ class CreateAppointmentWithPaymentView(APIView):
 
 
 class StripeCheckoutView(APIView):
-    """Creates a Stripe Checkout session for an appointment."""
+    """Creates a Stripe Checkout session."""
     permission_classes = [IsPatient]
 
     def post(self, request):
@@ -111,34 +130,46 @@ class StripeCheckoutView(APIView):
             appointment = Appointment.objects.get(
                 sid=appointment_sid,
                 patient=request.user.patient,
-                status='Pending Payment',
             )
             invoice = appointment.invoice
+            if invoice.status == 'Paid':
+                return Response({'detail': 'Already paid.'}, status=status.HTTP_400_BAD_REQUEST)
         except (Appointment.DoesNotExist, Invoice.DoesNotExist):
-            return Response({'detail': 'Appointment not found or already paid.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Appointment not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            checkout_session = stripe.checkout.Session.create(
-                payment_method_types=['card'],
-                line_items=[{
+            # Get or create Stripe customer for card saving
+            customer_id = get_or_create_stripe_customer(request.user.patient)
+            save_card = request.data.get('save_card', False)
+
+            session_params = {
+                'payment_method_types': ['card'],
+                'line_items': [{
                     'price_data': {
                         'currency': 'usd',
                         'product_data': {
-                            'name': f'Appointment: {appointment.service.name}',
-                            'description': f'Dr. {appointment.doctor.first_name} {appointment.doctor.first_last_name}',
+                            'name': f'Appointment: {appointment.service.name if appointment.service else "Service"}',
+                            'description': f'Dr. {appointment.doctor.first_name} {appointment.doctor.first_last_name}' if appointment.doctor else 'Lab Service',
                         },
                         'unit_amount': int(invoice.total * 100),
                     },
                     'quantity': 1,
                 }],
-                mode='payment',
-                success_url='http://localhost:3000/dashboard/patient/booking/success?appointment=' + appointment.sid + '&session_id={CHECKOUT_SESSION_ID}',
-                cancel_url=f'http://localhost:3000/dashboard/patient/booking/cancel?appointment={appointment.sid}',
-                metadata={
+                'mode': 'payment',
+                'success_url': f'{FRONTEND_URL}/dashboard/patient/booking/success?appointment={appointment.sid}&session_id={{CHECKOUT_SESSION_ID}}',
+                'cancel_url': f'{FRONTEND_URL}/dashboard/patient/booking/cancel?appointment={appointment.sid}',
+                'metadata': {
                     'appointment_sid': appointment.sid,
                     'invoice_sid': invoice.sid,
                 },
-            )
+            }
+
+            if customer_id:
+                session_params['customer'] = customer_id
+                if save_card:
+                    session_params['payment_intent_data'] = {'setup_future_usage': 'off_session'}
+
+            checkout_session = stripe.checkout.Session.create(**session_params)
 
             return Response({
                 'checkout_url': checkout_session.url,
@@ -149,8 +180,87 @@ class StripeCheckoutView(APIView):
             return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+class StripeSavedCardPayView(APIView):
+    """Pay with a saved card using PaymentIntent (no redirect)."""
+    permission_classes = [IsPatient]
+
+    @transaction.atomic
+    def post(self, request):
+        appointment_sid = request.data.get('appointment_sid')
+        payment_method_id = request.data.get('payment_method_id')
+
+        if not appointment_sid or not payment_method_id:
+            return Response({'detail': 'appointment_sid and payment_method_id required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        patient = request.user.patient
+        if not patient.stripe_customer_id:
+            return Response({'detail': 'No saved payment methods.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            appointment = Appointment.objects.get(sid=appointment_sid, patient=patient)
+            invoice = appointment.invoice
+            if invoice.status == 'Paid':
+                return Response({'detail': 'Already paid.'}, status=status.HTTP_400_BAD_REQUEST)
+        except (Appointment.DoesNotExist, Invoice.DoesNotExist):
+            return Response({'detail': 'Appointment not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payment_intent = stripe.PaymentIntent.create(
+                amount=int(invoice.total * 100),
+                currency='usd',
+                customer=patient.stripe_customer_id,
+                payment_method=payment_method_id,
+                off_session=True,
+                confirm=True,
+                metadata={
+                    'appointment_sid': appointment.sid,
+                    'invoice_sid': invoice.sid,
+                },
+            )
+
+            if payment_intent.status == 'succeeded':
+                _process_payment_success(
+                    appointment, invoice, 'stripe',
+                    payment_intent.id, {'payment_intent_id': payment_intent.id}
+                )
+                return Response({'detail': 'Payment successful.', 'appointment_sid': appointment.sid})
+            else:
+                return Response({'detail': 'Payment requires additional action.', 'client_secret': payment_intent.client_secret}, status=status.HTTP_402_PAYMENT_REQUIRED)
+
+        except stripe.error.CardError as e:
+            return Response({'detail': f'Card error: {e.user_message}'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+def _process_payment_success(appointment, invoice, payment_method, gateway_charge_id, gateway_response):
+    """Shared logic for processing successful payment (Stripe + PayPal)."""
+    # Check idempotency
+    if Payment.objects.filter(gateway_charge_id=gateway_charge_id).exists():
+        return
+
+    Payment.objects.create(
+        invoice=invoice,
+        amount=invoice.total,
+        payment_method=payment_method,
+        gateway_charge_id=gateway_charge_id,
+        gateway_response=gateway_response,
+        status='Completed',
+        paid_at=timezone.now(),
+    )
+
+    invoice.amount_paid = invoice.total
+    invoice.balance_due = Decimal('0')
+    invoice.status = 'Paid'
+    invoice.issued_at = timezone.now()
+    invoice.save()
+
+    _create_appointment_notification(appointment)
+    send_appointment_confirmation_email(appointment, invoice)
+
+
 class StripeVerifyPaymentView(APIView):
-    """Verifies a Stripe Checkout session after redirect (fallback for webhook)."""
+    """Verifies a Stripe payment after redirect (fallback for webhook)."""
     permission_classes = [IsPatient]
 
     @transaction.atomic
@@ -162,66 +272,33 @@ class StripeVerifyPaymentView(APIView):
             return Response({'detail': 'appointment_sid is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            appointment = Appointment.objects.get(
-                sid=appointment_sid,
-                patient=request.user.patient,
-            )
+            appointment = Appointment.objects.get(sid=appointment_sid, patient=request.user.patient)
             invoice = appointment.invoice
         except (Appointment.DoesNotExist, Invoice.DoesNotExist):
             return Response({'detail': 'Appointment not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        # Already processed
-        if appointment.status != 'Pending Payment':
+        if invoice.status == 'Paid':
             return Response({'detail': 'Payment already processed.', 'status': appointment.status})
 
-        # Verify with Stripe
         try:
             if session_id:
                 session = stripe.checkout.Session.retrieve(session_id)
             else:
-                # Find session by metadata
                 sessions = stripe.checkout.Session.list(limit=10)
                 session = next(
-                    (s for s in sessions.data if s.metadata.get('appointment_sid') == appointment_sid),
-                    None,
+                    (s for s in sessions.data if s.metadata.get('appointment_sid') == appointment_sid), None
                 )
                 if not session:
                     return Response({'detail': 'Stripe session not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
             if session.payment_status == 'paid':
-                # Check if payment already exists (idempotency)
-                if not Payment.objects.filter(gateway_charge_id=session.payment_intent).exists():
-                    Payment.objects.create(
-                        invoice=invoice,
-                        amount=invoice.total,
-                        payment_method='stripe',
-                        gateway_charge_id=session.payment_intent or '',
-                        gateway_response={'session_id': session.id, 'payment_status': session.payment_status},
-                        status='Completed',
-                        paid_at=timezone.now(),
-                    )
-
-                    invoice.amount_paid = invoice.total
-                    invoice.balance_due = Decimal('0')
-                    invoice.status = 'Paid'
-                    invoice.issued_at = timezone.now()
-                    invoice.save()
-
-                    appointment.status = 'Pending'
-                    appointment.save()
-
-                    Notification.objects.create(
-                        doctor=appointment.doctor,
-                        patient=appointment.patient,
-                        type='New Appointment',
-                        message=f'New appointment booked by {appointment.patient.full_name} for {appointment.service.name} on {appointment.date.strftime("%b %d, %Y at %I:%M %p")}',
-                    )
-
-                    send_appointment_confirmation_email(appointment, invoice)
-
-                return Response({'detail': 'Payment verified and appointment confirmed.', 'status': 'Pending'})
+                _process_payment_success(
+                    appointment, invoice, 'stripe',
+                    session.payment_intent or '', {'session_id': session.id}
+                )
+                return Response({'detail': 'Payment verified.', 'status': appointment.status})
             else:
-                return Response({'detail': 'Payment not completed yet.', 'payment_status': session.payment_status}, status=status.HTTP_402_PAYMENT_REQUIRED)
+                return Response({'detail': 'Payment not completed yet.'}, status=status.HTTP_402_PAYMENT_REQUIRED)
 
         except Exception as e:
             return Response({'detail': f'Verification failed: {str(e)}'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
@@ -238,9 +315,7 @@ class StripeWebhookView(APIView):
 
         if settings.STRIPE_WEBHOOK_SECRET:
             try:
-                event = stripe.Webhook.construct_event(
-                    payload, sig_header, settings.STRIPE_WEBHOOK_SECRET
-                )
+                event = stripe.Webhook.construct_event(payload, sig_header, settings.STRIPE_WEBHOOK_SECRET)
             except (ValueError, stripe.error.SignatureVerificationError):
                 return HttpResponse(status=400)
         else:
@@ -262,46 +337,22 @@ class StripeWebhookView(APIView):
             return
 
         try:
-            appointment = Appointment.objects.get(sid=appointment_sid, status='Pending Payment')
+            appointment = Appointment.objects.get(sid=appointment_sid)
             invoice = Invoice.objects.get(sid=invoice_sid)
         except (Appointment.DoesNotExist, Invoice.DoesNotExist):
             return
 
-        # Create payment record
-        Payment.objects.create(
-            invoice=invoice,
-            amount=invoice.total,
-            payment_method='stripe',
-            gateway_charge_id=session.get('payment_intent', ''),
-            gateway_response=session,
-            status='Completed',
-            paid_at=timezone.now(),
+        if invoice.status == 'Paid':
+            return
+
+        _process_payment_success(
+            appointment, invoice, 'stripe',
+            session.get('payment_intent', ''), session
         )
-
-        # Update invoice
-        invoice.amount_paid = invoice.total
-        invoice.balance_due = Decimal('0')
-        invoice.status = 'Paid'
-        invoice.issued_at = timezone.now()
-        invoice.save()
-
-        # Update appointment
-        appointment.status = 'Pending'
-        appointment.save()
-
-        # Create notification for doctor
-        Notification.objects.create(
-            doctor=appointment.doctor,
-            patient=appointment.patient,
-            type='New Appointment',
-            message=f'New appointment booked by {appointment.patient.full_name} for {appointment.service.name} on {appointment.date.strftime("%b %d, %Y at %I:%M %p")}',
-        )
-
-        send_appointment_confirmation_email(appointment, invoice)
 
 
 class PayPalCreateOrderView(APIView):
-    """Creates a PayPal order for an appointment."""
+    """Creates a PayPal order."""
     permission_classes = [IsPatient]
 
     def post(self, request):
@@ -311,25 +362,23 @@ class PayPalCreateOrderView(APIView):
             appointment = Appointment.objects.get(
                 sid=appointment_sid,
                 patient=request.user.patient,
-                status='Pending Payment',
             )
             invoice = appointment.invoice
+            if invoice.status == 'Paid':
+                return Response({'detail': 'Already paid.'}, status=status.HTTP_400_BAD_REQUEST)
         except (Appointment.DoesNotExist, Invoice.DoesNotExist):
-            return Response({'detail': 'Appointment not found or already paid.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Appointment not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
         payment = paypalrestsdk.Payment({
             "intent": "sale",
             "payer": {"payment_method": "paypal"},
             "redirect_urls": {
-                "return_url": f"http://localhost:3000/dashboard/patient/booking/paypal-success?appointment={appointment.sid}",
-                "cancel_url": f"http://localhost:3000/dashboard/patient/booking/cancel?appointment={appointment.sid}",
+                "return_url": f"{FRONTEND_URL}/dashboard/patient/booking/paypal-success?appointment={appointment.sid}",
+                "cancel_url": f"{FRONTEND_URL}/dashboard/patient/booking/cancel?appointment={appointment.sid}",
             },
             "transactions": [{
-                "amount": {
-                    "total": str(invoice.total),
-                    "currency": "USD",
-                },
-                "description": f"Appointment: {appointment.service.name} - Dr. {appointment.doctor.first_name} {appointment.doctor.first_last_name}",
+                "amount": {"total": str(invoice.total), "currency": "USD"},
+                "description": f"Appointment: {appointment.service.name if appointment.service else 'Service'}",
                 "custom": appointment.sid,
             }],
         })
@@ -338,16 +387,13 @@ class PayPalCreateOrderView(APIView):
             approval_url = next(
                 (link.href for link in payment.links if link.rel == "approval_url"), None
             )
-            return Response({
-                'approval_url': approval_url,
-                'payment_id': payment.id,
-            })
+            return Response({'approval_url': approval_url, 'payment_id': payment.id})
         else:
             return Response({'detail': payment.error}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class PayPalCaptureOrderView(APIView):
-    """Captures/executes a PayPal payment after patient approves."""
+    """Captures a PayPal payment after approval."""
     permission_classes = [IsPatient]
 
     @transaction.atomic
@@ -357,79 +403,54 @@ class PayPalCaptureOrderView(APIView):
         appointment_sid = request.data.get('appointment_sid')
 
         if not payment_id or not payer_id or not appointment_sid:
-            return Response({'detail': 'Missing payment_id, payer_id, or appointment_sid.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Missing required fields.'}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
-            appointment = Appointment.objects.get(
-                sid=appointment_sid,
-                patient=request.user.patient,
-                status='Pending Payment',
-            )
+            appointment = Appointment.objects.get(sid=appointment_sid, patient=request.user.patient)
             invoice = appointment.invoice
         except (Appointment.DoesNotExist, Invoice.DoesNotExist):
-            return Response({'detail': 'Appointment not found or already paid.'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({'detail': 'Appointment not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if invoice.status == 'Paid':
+            return Response({'detail': 'Already paid.', 'appointment_sid': appointment.sid})
 
         payment = paypalrestsdk.Payment.find(payment_id)
 
         if payment.execute({"payer_id": payer_id}):
-            # Create payment record
-            Payment.objects.create(
-                invoice=invoice,
-                amount=invoice.total,
-                payment_method='paypal',
-                gateway_charge_id=payment_id,
-                gateway_response=payment.to_dict(),
-                status='Completed',
-                paid_at=timezone.now(),
+            _process_payment_success(
+                appointment, invoice, 'paypal',
+                payment_id, payment.to_dict()
             )
-
-            # Update invoice
-            invoice.amount_paid = invoice.total
-            invoice.balance_due = Decimal('0')
-            invoice.status = 'Paid'
-            invoice.issued_at = timezone.now()
-            invoice.save()
-
-            # Update appointment
-            appointment.status = 'Pending'
-            appointment.save()
-
-            # Create notification
-            Notification.objects.create(
-                doctor=appointment.doctor,
-                patient=appointment.patient,
-                type='New Appointment',
-                message=f'New appointment booked by {appointment.patient.full_name} for {appointment.service.name} on {appointment.date.strftime("%b %d, %Y at %I:%M %p")}',
-            )
-
-            send_appointment_confirmation_email(appointment, invoice)
-
             return Response({'detail': 'Payment successful.', 'appointment_sid': appointment.sid})
         else:
             return Response({'detail': payment.error}, status=status.HTTP_400_BAD_REQUEST)
 
 
 class CancelPendingPaymentView(APIView):
-    """Cancels an appointment that was pending payment."""
+    """Cancels an unpaid appointment."""
     permission_classes = [IsPatient]
 
     def post(self, request):
         appointment_sid = request.data.get('appointment_sid')
 
         try:
-            appointment = Appointment.objects.get(
-                sid=appointment_sid,
-                patient=request.user.patient,
-                status='Pending Payment',
-            )
+            appointment = Appointment.objects.get(sid=appointment_sid, patient=request.user.patient)
+            invoice = appointment.invoice
         except Appointment.DoesNotExist:
             return Response({'detail': 'Appointment not found.'}, status=status.HTTP_404_NOT_FOUND)
+        except Invoice.DoesNotExist:
+            appointment.status = 'Cancelled'
+            appointment.save()
+            return Response({'detail': 'Appointment cancelled.'})
 
-        # Delete invoice and appointment
-        if hasattr(appointment, 'invoice'):
-            appointment.invoice.line_items.all().delete()
-            appointment.invoice.delete()
+        if invoice.status == 'Paid':
+            return Response({'detail': 'Cannot cancel a paid appointment this way.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        appointment.delete()
+        # Cancel appointment (soft cancel, not hard delete)
+        appointment.status = 'Cancelled'
+        appointment.save()
+
+        invoice.status = 'Void'
+        invoice.save()
 
         return Response({'detail': 'Appointment cancelled.'})

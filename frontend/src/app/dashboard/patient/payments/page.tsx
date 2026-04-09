@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { DollarSign, TrendingUp, Clock } from 'lucide-react';
+import SavedCardsSection from '@/components/patient/SavedCardsSection';
 
 const statusVariant: Record<string, string> = {
   Completed: 'bg-emerald-50 text-emerald-700 border-emerald-200',
@@ -53,9 +54,9 @@ export default function PatientPaymentsPage() {
   if (authLoading || !user) return null;
 
   const summaryCards = [
-    { label: 'Total Paid', value: `$${stats?.total_paid ?? 0}`, icon: DollarSign, gradient: 'from-emerald-500 to-emerald-600' },
-    { label: 'This Month', value: `$${stats?.this_month_paid ?? 0}`, icon: TrendingUp, gradient: 'from-blue-500 to-blue-600' },
-    { label: 'Pending', value: `$${stats?.pending_amount ?? 0}`, icon: Clock, gradient: 'from-amber-500 to-amber-600' },
+    { label: 'Total Paid', value: `$${stats?.total_paid ?? 0}`, icon: DollarSign, gradient: 'from-blue-500 to-indigo-600' },
+    { label: 'This Month', value: `$${stats?.this_month_paid ?? 0}`, icon: TrendingUp, gradient: 'from-slate-600 to-slate-700' },
+    { label: 'Pending', value: `$${stats?.pending_amount ?? 0}`, icon: Clock, gradient: 'from-slate-400 to-slate-500' },
   ];
 
   return (
@@ -84,8 +85,14 @@ export default function PatientPaymentsPage() {
         })}
       </div>
 
+      {/* Saved Payment Methods */}
+      <div className="mb-8">
+        <SavedCardsSection />
+      </div>
+
+      {/* Payment History */}
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 max-h-[500px] overflow-y-auto">
           {loading ? (
             <div className="p-6 space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>
           ) : payments.length === 0 ? (

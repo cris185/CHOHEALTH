@@ -76,7 +76,7 @@ class InvoiceLineItem(models.Model):
     total = models.DecimalField(max_digits=10, decimal_places=2)
 
     service = models.ForeignKey('base.Service', on_delete=models.SET_NULL, null=True, blank=True)
-    lab_order = models.ForeignKey('base.LabOrder', on_delete=models.SET_NULL, null=True, blank=True)
+    lab_order_item = models.ForeignKey('base.LabOrderItem', on_delete=models.SET_NULL, null=True, blank=True)
     order = models.PositiveIntegerField(default=0)
 
     class Meta:

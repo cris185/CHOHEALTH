@@ -9,8 +9,8 @@ from django.conf import settings as django_settings
 from django.db.models import Avg, Sum
 from django.utils import timezone
 
-from .models import Doctor, DoctorSchedule, Notification
-from .serializers import DoctorScheduleSerializer, DoctorProfileSerializer, NotificationSerializer
+from .models import Doctor, DoctorQualification, DoctorSchedule, Notification
+from .serializers import DoctorScheduleSerializer, DoctorProfileSerializer, DoctorQualificationSerializer, DoctorQualificationCreateSerializer, NotificationSerializer
 from .permissions import IsDoctor
 from .utils import get_available_slots, get_available_days
 from base.models import Service, Appointment, Review
@@ -78,6 +78,37 @@ class DoctorProfileView(generics.RetrieveUpdateAPIView):
         return self.request.user.doctor
 
 
+class DoctorQualificationListCreateView(generics.ListCreateAPIView):
+    """List and create doctor qualifications."""
+    permission_classes = [IsDoctor]
+    parser_classes = [MultiPartParser, FormParser, JSONParser]
+    pagination_class = None
+
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return DoctorQualificationCreateSerializer
+        return DoctorQualificationSerializer
+
+    def get_queryset(self):
+        return DoctorQualification.objects.filter(doctor=self.request.user.doctor)
+
+    def perform_create(self, serializer):
+        serializer.save(doctor=self.request.user.doctor)
+
+
+class DoctorQualificationDeleteView(APIView):
+    """Delete a doctor qualification."""
+    permission_classes = [IsDoctor]
+
+    def delete(self, request, sid):
+        try:
+            qualification = DoctorQualification.objects.get(sid=sid, doctor=request.user.doctor)
+            qualification.delete()
+            return Response(status=status.HTTP_204_NO_CONTENT)
+        except DoctorQualification.DoesNotExist:
+            return Response({'detail': 'Not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+
 class DoctorStatsView(APIView):
     permission_classes = [IsDoctor]
 
@@ -89,24 +120,22 @@ class DoctorStatsView(APIView):
 
         total_appointments = Appointment.objects.filter(doctor=doctor).count()
         today_appointments = Appointment.objects.filter(
-            doctor=doctor, date__date=today, status__in=['Pending', 'Confirmed']
+            doctor=doctor, date__date=today, status__in=['Scheduled', 'Confirmed']
         ).count()
         completed_appointments = Appointment.objects.filter(doctor=doctor, status='Completed').count()
         pending_appointments = Appointment.objects.filter(
-            doctor=doctor, status__in=['Pending', 'Confirmed']
+            doctor=doctor, status__in=['Scheduled', 'Confirmed']
         ).count()
         total_patients = Appointment.objects.filter(doctor=doctor).values('patient').distinct().count()
 
-        rating_data = Review.objects.filter(doctor=doctor).aggregate(
-            avg=Avg('rating'), count=Sum('rating', default=0)
-        )
+        rating_data = Review.objects.filter(doctor=doctor).aggregate(avg=Avg('rating'))
         total_reviews = Review.objects.filter(doctor=doctor).count()
 
         total_revenue = Invoice.objects.filter(
             appointment__doctor=doctor, status='Paid'
         ).aggregate(total=Sum('total'))['total']
 
-        unread_notifications = Notification.objects.filter(doctor=doctor, is_read=False).count()
+        unread_notifications = Notification.objects.filter(recipient=request.user, is_read=False).count()
 
         return Response({
             'total_appointments': total_appointments,
@@ -121,12 +150,16 @@ class DoctorStatsView(APIView):
         })
 
 
+# ============================================================================
+# Notifications (recipient-based, works for any user type)
+# ============================================================================
+
 class NotificationListView(generics.ListAPIView):
     serializer_class = NotificationSerializer
     permission_classes = [IsDoctor]
 
     def get_queryset(self):
-        qs = Notification.objects.filter(doctor=self.request.user.doctor)
+        qs = Notification.objects.filter(recipient=self.request.user)
         status_filter = self.request.query_params.get('status')
         if status_filter == 'unread':
             qs = qs.filter(is_read=False)
@@ -140,7 +173,7 @@ class NotificationMarkReadView(APIView):
 
     def patch(self, request, sid):
         try:
-            notification = Notification.objects.get(sid=sid, doctor=request.user.doctor)
+            notification = Notification.objects.get(sid=sid, recipient=request.user)
             notification.is_read = True
             notification.save()
             return Response({'detail': 'Marked as read.'})
@@ -152,9 +185,7 @@ class NotificationMarkAllReadView(APIView):
     permission_classes = [IsDoctor]
 
     def post(self, request):
-        count = Notification.objects.filter(
-            doctor=request.user.doctor, is_read=False
-        ).update(is_read=True)
+        count = Notification.objects.filter(recipient=request.user, is_read=False).update(is_read=True)
         return Response({'detail': f'{count} notifications marked as read.'})
 
 
@@ -163,7 +194,7 @@ class NotificationDeleteView(APIView):
 
     def delete(self, request, sid):
         try:
-            notification = Notification.objects.get(sid=sid, doctor=request.user.doctor)
+            notification = Notification.objects.get(sid=sid, recipient=request.user)
             notification.delete()
             return Response(status=status.HTTP_204_NO_CONTENT)
         except Notification.DoesNotExist:
@@ -174,5 +205,5 @@ class NotificationDeleteAllView(APIView):
     permission_classes = [IsDoctor]
 
     def delete(self, request):
-        count = Notification.objects.filter(doctor=request.user.doctor).delete()[0]
+        count = Notification.objects.filter(recipient=request.user).delete()[0]
         return Response({'detail': f'{count} notifications deleted.'})

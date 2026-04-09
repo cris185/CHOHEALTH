@@ -4,7 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { doctorProfile as profileApi, DoctorProfile } from '@/lib/api';
+import { doctorProfile as profileApi, doctorQualifications as qualApi, DoctorProfile, DoctorQualificationItem } from '@/lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -12,7 +12,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
-import { User, Camera, Loader2, CheckCircle } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { User, Camera, Loader2, CheckCircle, Plus, Trash2, GraduationCap } from 'lucide-react';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -21,8 +22,10 @@ export default function DoctorProfilePage() {
   const t = useTranslations();
   const router = useRouter();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const certInputRef = useRef<HTMLInputElement>(null);
 
   const [profile, setProfile] = useState<DoctorProfile | null>(null);
+  const [qualifications, setQualifications] = useState<DoctorQualificationItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -30,9 +33,15 @@ export default function DoctorProfilePage() {
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
 
+  // Qualification form
+  const [showQualForm, setShowQualForm] = useState(false);
+  const [qualForm, setQualForm] = useState({ degree: '', institution: '', year: '' });
+  const [certFile, setCertFile] = useState<File | null>(null);
+  const [qualSaving, setQualSaving] = useState(false);
+
   const [form, setForm] = useState({
     first_name: '', second_name: '', first_last_name: '', second_last_name: '',
-    mobile: '', country: '', bio: '', specialization: '', qualification: '', years_of_experience: 0,
+    mobile: '', country: '', bio: '', specialization: '', years_of_experience: 0,
   });
 
   useEffect(() => {
@@ -50,11 +59,13 @@ export default function DoctorProfilePage() {
           first_name: data.first_name, second_name: data.second_name,
           first_last_name: data.first_last_name, second_last_name: data.second_last_name,
           mobile: data.mobile, country: data.country, bio: data.bio,
-          specialization: data.specialization, qualification: data.qualification,
+          specialization: data.specialization,
           years_of_experience: data.years_of_experience,
         });
         if (data.image) setImagePreview(data.image.startsWith('http') ? data.image : `${API_BASE}${data.image}`);
       }).catch(() => {}).finally(() => setLoading(false));
+
+      qualApi.list(token).then(setQualifications).catch(() => {});
     }
   }, [user]);
 
@@ -86,6 +97,32 @@ export default function DoctorProfilePage() {
     } finally { setSaving(false); }
   };
 
+  const handleAddQualification = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setQualSaving(true);
+    const token = localStorage.getItem('access_token') || '';
+    const formData = new FormData();
+    formData.append('degree', qualForm.degree);
+    formData.append('institution', qualForm.institution);
+    if (qualForm.year) formData.append('year', qualForm.year);
+    if (certFile) formData.append('certificate', certFile);
+
+    try {
+      const newQual = await qualApi.create(formData, token);
+      setQualifications([newQual, ...qualifications]);
+      setQualForm({ degree: '', institution: '', year: '' });
+      setCertFile(null);
+      setShowQualForm(false);
+    } catch { /* ignore */ }
+    finally { setQualSaving(false); }
+  };
+
+  const handleDeleteQualification = async (sid: string) => {
+    const token = localStorage.getItem('access_token') || '';
+    await qualApi.delete(sid, token).catch(() => {});
+    setQualifications(qualifications.filter((q) => q.sid !== sid));
+  };
+
   if (authLoading || loading || !user) return null;
 
   return (
@@ -95,7 +132,8 @@ export default function DoctorProfilePage() {
         <h2 className="text-2xl font-bold tracking-tight">Edit Profile</h2>
       </div>
 
-      <Card>
+      {/* Profile Info Card */}
+      <Card className="mb-6">
         <CardHeader>
           <div className="flex items-center gap-6">
             <div className="relative">
@@ -140,7 +178,6 @@ export default function DoctorProfilePage() {
               <div className="space-y-2"><Label>Country</Label><Input name="country" value={form.country} onChange={handleChange} /></div>
             </div>
             <div className="space-y-2"><Label>Specialization *</Label><Input name="specialization" required value={form.specialization} onChange={handleChange} /></div>
-            <div className="space-y-2"><Label>Qualifications *</Label><Input name="qualification" required value={form.qualification} onChange={handleChange} /></div>
             <div className="space-y-2"><Label>Years of Experience</Label><Input name="years_of_experience" type="number" min={0} value={form.years_of_experience} onChange={handleChange} /></div>
             <div className="space-y-2"><Label>Biography</Label><Textarea name="bio" rows={4} value={form.bio} onChange={handleChange} /></div>
 
@@ -150,6 +187,95 @@ export default function DoctorProfilePage() {
             </Button>
           </CardContent>
         </form>
+      </Card>
+
+      {/* Qualifications Card */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <GraduationCap className="h-5 w-5 text-primary" />
+              Qualifications
+            </CardTitle>
+            <Button variant="outline" size="sm" onClick={() => setShowQualForm(!showQualForm)}>
+              <Plus className="mr-1 h-4 w-4" />
+              Add
+            </Button>
+          </div>
+        </CardHeader>
+
+        <CardContent className="space-y-4">
+          {/* Add form */}
+          {showQualForm && (
+            <form onSubmit={handleAddQualification} className="rounded-lg border bg-muted/30 p-4 space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Degree *</Label>
+                  <Input placeholder="e.g. MD, PhD" required value={qualForm.degree}
+                    onChange={(e) => setQualForm({ ...qualForm, degree: e.target.value })} />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Year</Label>
+                  <Input type="number" placeholder="2020" value={qualForm.year}
+                    onChange={(e) => setQualForm({ ...qualForm, year: e.target.value })} />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Institution *</Label>
+                <Input placeholder="e.g. Harvard Medical School" required value={qualForm.institution}
+                  onChange={(e) => setQualForm({ ...qualForm, institution: e.target.value })} />
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Certificate (optional)</Label>
+                <Input type="file" accept=".pdf,.jpg,.png" ref={certInputRef}
+                  onChange={(e) => setCertFile(e.target.files?.[0] || null)} />
+              </div>
+              <div className="flex gap-2">
+                <Button type="submit" size="sm" disabled={qualSaving}>
+                  {qualSaving && <Loader2 className="mr-1 h-3 w-3 animate-spin" />}
+                  Save
+                </Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => setShowQualForm(false)}>
+                  Cancel
+                </Button>
+              </div>
+            </form>
+          )}
+
+          {/* List */}
+          <div className={qualifications.length > 3 ? 'max-h-[320px] overflow-y-auto space-y-3 pr-1' : 'space-y-3'}>
+          {qualifications.length === 0 && !showQualForm && (
+            <div className="py-8 text-center">
+              <GraduationCap className="mx-auto h-10 w-10 text-muted-foreground/30" />
+              <p className="mt-2 text-sm text-muted-foreground">No qualifications added yet.</p>
+              <p className="text-xs text-muted-foreground/60">Add your degrees and certifications.</p>
+            </div>
+          )}
+
+          {qualifications.map((q, idx) => (
+            <div key={q.sid || `qual-${idx}`} className="flex items-start justify-between rounded-lg border p-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <p className="text-sm font-semibold">{q.degree}</p>
+                  {q.year && <Badge variant="secondary" className="text-[10px]">{q.year}</Badge>}
+                </div>
+                <p className="text-sm text-muted-foreground">{q.institution}</p>
+                {q.certificate && (
+                  <a href={q.certificate.startsWith('http') ? q.certificate : `${API_BASE}${q.certificate}`}
+                    target="_blank" rel="noopener noreferrer"
+                    className="text-xs text-primary hover:underline mt-1 inline-block">
+                    View Certificate
+                  </a>
+                )}
+              </div>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"
+                onClick={() => handleDeleteQualification(q.sid)}>
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          ))}
+          </div>
+        </CardContent>
       </Card>
     </div>
   );

@@ -56,7 +56,7 @@ def generate_invoice_pdf(invoice) -> bytes:
     ]
     if hasattr(invoice, 'appointment') and invoice.appointment:
         appt = invoice.appointment
-        doctor_name = f'Dr. {appt.doctor.first_name} {appt.doctor.first_last_name}'
+        doctor_name = f'Dr. {appt.doctor.first_name} {appt.doctor.first_last_name}' if appt.doctor else 'Lab Service'
         info_data.append([
             Paragraph(f'Phone: {invoice.patient.phone or "N/A"}', styles['InfoText']),
             Paragraph(f'Doctor: {doctor_name}', styles['InfoText']),

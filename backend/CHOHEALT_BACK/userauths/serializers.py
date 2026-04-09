@@ -71,7 +71,6 @@ class DoctorRegisterSerializer(_BaseRegisterSerializer):
     country = serializers.CharField(max_length=100, required=False, default='', allow_blank=True)
     bio = serializers.CharField(required=False, default='', allow_blank=True)
     specialization = serializers.CharField(max_length=200)
-    qualification = serializers.CharField(max_length=300)
     years_of_experience = serializers.IntegerField(min_value=0, default=0)
 
     @transaction.atomic
@@ -91,7 +90,6 @@ class DoctorRegisterSerializer(_BaseRegisterSerializer):
             country=validated_data.get('country', ''),
             bio=validated_data.get('bio', ''),
             specialization=validated_data['specialization'],
-            qualification=validated_data['qualification'],
             years_of_experience=validated_data.get('years_of_experience', 0),
         )
         return user

@@ -2,6 +2,7 @@ from django.urls import path
 from .views import (
     DoctorScheduleListView, AvailableDaysView, AvailableSlotsView,
     DoctorProfileView, DoctorStatsView,
+    DoctorQualificationListCreateView, DoctorQualificationDeleteView,
     NotificationListView, NotificationMarkReadView,
     NotificationMarkAllReadView, NotificationDeleteView, NotificationDeleteAllView,
 )
@@ -9,8 +10,10 @@ from .views import (
 urlpatterns = [
     path('doctor/profile/', DoctorProfileView.as_view(), name='doctor-profile'),
     path('doctor/stats/', DoctorStatsView.as_view(), name='doctor-stats'),
+    path('doctor/qualifications/', DoctorQualificationListCreateView.as_view(), name='doctor-qualifications'),
+    path('doctor/qualifications/<str:sid>/', DoctorQualificationDeleteView.as_view(), name='doctor-qualification-delete'),
 
-    # Notifications — fixed paths BEFORE <sid> to avoid conflicts
+    # Notifications
     path('notifications/', NotificationListView.as_view(), name='notification-list'),
     path('notifications/mark-all-read/', NotificationMarkAllReadView.as_view(), name='notification-mark-all-read'),
     path('notifications/delete-all/', NotificationDeleteAllView.as_view(), name='notification-delete-all'),

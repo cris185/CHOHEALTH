@@ -18,11 +18,6 @@ class PatientProfileSerializer(serializers.ModelSerializer):
 
 
 class PatientNotificationSerializer(serializers.ModelSerializer):
-    doctor_name = serializers.SerializerMethodField()
-
     class Meta:
         model = Notification
-        fields = ('sid', 'type', 'message', 'is_read', 'created_at', 'doctor_name')
-
-    def get_doctor_name(self, obj):
-        return f'Dr. {obj.doctor.first_name} {obj.doctor.first_last_name}' if obj.doctor else None
+        fields = ('sid', 'type', 'title', 'message', 'is_read', 'created_at', 'appointment')

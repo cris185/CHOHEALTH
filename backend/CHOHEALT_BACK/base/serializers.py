@@ -3,17 +3,24 @@ from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
 from .models import Service, Appointment, Branch
-from doctor.models import Doctor, DoctorSchedule
+from doctor.models import Doctor, DoctorSchedule, DoctorQualification
 import zoneinfo
+
+
+class DoctorQualificationBriefSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorQualification
+        fields = ('degree', 'institution', 'year')
 
 
 class ServiceDoctorSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     image = serializers.FileField(read_only=True)
+    qualifications = DoctorQualificationBriefSerializer(many=True, read_only=True)
 
     class Meta:
         model = Doctor
-        fields = ('sid', 'full_name', 'image', 'specialization', 'qualification', 'years_of_experience', 'bio', 'next_available_appointment_date')
+        fields = ('sid', 'full_name', 'image', 'specialization', 'qualifications', 'years_of_experience', 'bio')
 
 
 class ServiceListSerializer(serializers.ModelSerializer):
@@ -22,7 +29,7 @@ class ServiceListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Service
-        fields = ('sid', 'name', 'description', 'image', 'cost', 'duration_minutes', 'doctors', 'doctors_count')
+        fields = ('sid', 'name', 'description', 'image', 'cost', 'duration_minutes', 'service_type', 'doctors', 'doctors_count')
 
     def get_doctors_count(self, obj):
         return obj.doctors.count()
@@ -35,7 +42,7 @@ class BranchSerializer(serializers.ModelSerializer):
 
 
 class AppointmentCreateSerializer(serializers.Serializer):
-    doctor_sid = serializers.CharField()
+    doctor_sid = serializers.CharField(required=False, allow_blank=True, default='')
     service_sid = serializers.CharField()
     date = serializers.DateTimeField()
     mode = serializers.ChoiceField(choices=[('In-Person', 'In-Person'), ('Virtual', 'Virtual')])
@@ -46,58 +53,65 @@ class AppointmentCreateSerializer(serializers.Serializer):
 
     def validate(self, data):
         try:
-            doctor = Doctor.objects.get(sid=data['doctor_sid'])
             service = Service.objects.get(sid=data['service_sid'])
-        except Doctor.DoesNotExist:
-            raise serializers.ValidationError({'doctor_sid': 'Doctor not found.'})
         except Service.DoesNotExist:
             raise serializers.ValidationError({'service_sid': 'Service not found.'})
 
-        if not service.doctors.filter(pk=doctor.pk).exists():
-            raise serializers.ValidationError('This doctor does not offer this service.')
+        doctor = None
+        if data.get('doctor_sid'):
+            try:
+                doctor = Doctor.objects.get(sid=data['doctor_sid'])
+            except Doctor.DoesNotExist:
+                raise serializers.ValidationError({'doctor_sid': 'Doctor not found.'})
+
+            if not service.doctors.filter(pk=doctor.pk).exists():
+                raise serializers.ValidationError('This doctor does not offer this service.')
+
+        # Consultation services require a doctor
+        if service.service_type == 'Consultation' and not doctor:
+            raise serializers.ValidationError({'doctor_sid': 'Consultation services require a doctor.'})
 
         appt_date = data['date']
         if appt_date <= timezone.now():
             raise serializers.ValidationError({'date': 'Appointment date must be in the future.'})
 
-        # Validate slot is within doctor's schedule
-        tz = zoneinfo.ZoneInfo(settings.TIME_ZONE)
-        local_date = appt_date.astimezone(tz)
-        day_of_week = local_date.weekday()
-        appt_time = local_date.time()
+        # Schedule validation only for consultation with doctor
+        if doctor and service.service_type == 'Consultation':
+            tz = zoneinfo.ZoneInfo(settings.TIME_ZONE)
+            local_date = appt_date.astimezone(tz)
+            day_of_week = local_date.weekday()
+            appt_time = local_date.time()
 
-        schedule = DoctorSchedule.objects.filter(
-            doctor=doctor, day_of_week=day_of_week, is_active=True
-        ).first()
+            schedule = DoctorSchedule.objects.filter(
+                doctor=doctor, day_of_week=day_of_week, is_active=True,
+                start_time__lte=appt_time, end_time__gt=appt_time,
+            ).first()
 
-        if not schedule:
-            raise serializers.ValidationError({'date': 'Doctor is not available on this day.'})
+            if not schedule:
+                raise serializers.ValidationError({'date': 'Doctor is not available at this time.'})
 
-        if appt_time < schedule.start_time or appt_time >= schedule.end_time:
-            raise serializers.ValidationError({'date': 'Time is outside doctor working hours.'})
+            # Break check
+            if schedule.break_start and schedule.break_end:
+                slot_end_time = (datetime.combine(local_date.date(), appt_time) + timedelta(minutes=service.duration_minutes)).time()
+                if appt_time < schedule.break_end and slot_end_time > schedule.break_start:
+                    raise serializers.ValidationError({'date': 'This time slot falls within the break period.'})
 
-        # Check break
-        if schedule.break_start and schedule.break_end:
-            slot_end_time = (datetime.combine(local_date.date(), appt_time) + timedelta(minutes=service.duration_minutes)).time()
-            if appt_time < schedule.break_end and slot_end_time > schedule.break_start:
-                raise serializers.ValidationError({'date': 'This time slot falls within the break period.'})
+            # Overlap check
+            duration = timedelta(minutes=service.duration_minutes)
+            slot_end = appt_date + duration
 
-        # Check overlap with existing appointments
-        duration = timedelta(minutes=service.duration_minutes)
-        slot_end = appt_date + duration
+            conflicts = Appointment.objects.filter(
+                doctor=doctor,
+                status__in=['Scheduled', 'Confirmed', 'In Progress'],
+            ).select_related('service')
 
-        conflicts = Appointment.objects.filter(
-            doctor=doctor,
-            status__in=['Pending', 'Confirmed'],
-        ).select_related('service')
+            for appt in conflicts:
+                appt_duration = appt.service.duration_minutes if appt.service else 30
+                existing_end = appt.date + timedelta(minutes=appt_duration)
+                if appt_date < existing_end and slot_end > appt.date:
+                    raise serializers.ValidationError({'date': 'This time slot is already booked.'})
 
-        for appt in conflicts:
-            appt_duration = appt.service.duration_minutes if appt.service else 30
-            existing_end = appt.date + timedelta(minutes=appt_duration)
-            if appt_date < existing_end and slot_end > appt.date:
-                raise serializers.ValidationError({'date': 'This time slot is already booked.'})
-
-        # Validate branch for in-person
+        # Branch validation
         branch = None
         if data['mode'] == 'In-Person' and data.get('branch_sid'):
             try:
@@ -122,7 +136,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
             issues=validated_data.get('issues', ''),
             symptoms=validated_data.get('symptoms', ''),
             notes=validated_data.get('notes', ''),
-            status='Pending',
+            status='Scheduled',
         )
         return appointment
 
@@ -137,7 +151,9 @@ class AppointmentListSerializer(serializers.ModelSerializer):
         fields = ('sid', 'date', 'status', 'mode', 'doctor_name', 'service_name', 'branch_name', 'issues', 'symptoms', 'notes', 'created_at')
 
     def get_doctor_name(self, obj):
-        return f'Dr. {obj.doctor.first_name} {obj.doctor.first_last_name}'
+        if obj.doctor:
+            return f'Dr. {obj.doctor.first_name} {obj.doctor.first_last_name}'
+        return 'Lab Service'
 
     def get_service_name(self, obj):
         return obj.service.name if obj.service else None
@@ -199,7 +215,7 @@ class DoctorAppointmentDetailSerializer(serializers.ModelSerializer):
             'patient_name', 'patient_image', 'patient_email',
             'patient_phone', 'patient_date_of_birth', 'patient_gender', 'patient_blood_group',
             'service_name', 'service_duration',
-            'branch_name', 'room',
+            'branch_name', 'room', 'meeting_link',
             'issues', 'symptoms', 'notes', 'created_at',
         )
 
@@ -242,7 +258,7 @@ class ServiceDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Service
-        fields = ('sid', 'name', 'description', 'image', 'cost', 'duration_minutes', 'doctors', 'doctors_count')
+        fields = ('sid', 'name', 'description', 'image', 'cost', 'duration_minutes', 'service_type', 'doctors', 'doctors_count')
 
     def get_doctors_count(self, obj):
         return obj.doctors.count()

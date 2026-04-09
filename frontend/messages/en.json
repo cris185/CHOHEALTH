@@ -195,6 +195,8 @@
         "dashboard": "Dashboard",
         "services": "Services",
         "appointments": "My Appointments",
+        "medicine": "Medicine",
+        "labs": "Labs",
         "notifications": "Notifications",
         "payments": "Payments",
         "profile": "Profile"

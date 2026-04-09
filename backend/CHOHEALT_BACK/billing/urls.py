@@ -6,8 +6,13 @@ from .views import (
 from .payment_views import (
     CreateAppointmentWithPaymentView,
     StripeCheckoutView, StripeVerifyPaymentView, StripeWebhookView,
+    StripeSavedCardPayView,
     PayPalCreateOrderView, PayPalCaptureOrderView,
     CancelPendingPaymentView,
+)
+from .payment_methods_views import (
+    SavedCardsListView, SaveCardSetupView,
+    DeleteSavedCardView, SetDefaultCardView,
 )
 
 urlpatterns = [
@@ -21,7 +26,14 @@ urlpatterns = [
     path('payments/stripe/checkout/', StripeCheckoutView.as_view(), name='stripe-checkout'),
     path('payments/stripe/verify/', StripeVerifyPaymentView.as_view(), name='stripe-verify'),
     path('payments/stripe/webhook/', StripeWebhookView.as_view(), name='stripe-webhook'),
+    path('payments/stripe/saved-card/', StripeSavedCardPayView.as_view(), name='stripe-saved-card-pay'),
     path('payments/paypal/create-order/', PayPalCreateOrderView.as_view(), name='paypal-create-order'),
     path('payments/paypal/capture-order/', PayPalCaptureOrderView.as_view(), name='paypal-capture-order'),
     path('payments/cancel/', CancelPendingPaymentView.as_view(), name='cancel-pending-payment'),
+
+    # Saved payment methods
+    path('payment-methods/cards/', SavedCardsListView.as_view(), name='saved-cards-list'),
+    path('payment-methods/setup/', SaveCardSetupView.as_view(), name='save-card-setup'),
+    path('payment-methods/cards/<str:payment_method_id>/', DeleteSavedCardView.as_view(), name='delete-saved-card'),
+    path('payment-methods/default/', SetDefaultCardView.as_view(), name='set-default-card'),
 ]

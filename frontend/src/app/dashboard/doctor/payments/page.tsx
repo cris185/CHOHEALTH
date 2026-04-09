@@ -53,9 +53,9 @@ export default function DoctorPaymentsPage() {
   if (authLoading || !user) return null;
 
   const summaryCards = [
-    { label: 'Total Revenue', value: `$${stats?.total_revenue ?? 0}`, icon: DollarSign, gradient: 'from-emerald-500 to-emerald-600' },
-    { label: 'This Month', value: `$${stats?.this_month_revenue ?? 0}`, icon: TrendingUp, gradient: 'from-blue-500 to-blue-600' },
-    { label: 'Pending', value: `$${stats?.pending_amount ?? 0}`, icon: Clock, gradient: 'from-amber-500 to-amber-600' },
+    { label: 'Total Revenue', value: `$${stats?.total_revenue ?? 0}`, icon: DollarSign, gradient: 'from-blue-500 to-indigo-600' },
+    { label: 'This Month', value: `$${stats?.this_month_revenue ?? 0}`, icon: TrendingUp, gradient: 'from-slate-600 to-slate-700' },
+    { label: 'Pending', value: `$${stats?.pending_amount ?? 0}`, icon: Clock, gradient: 'from-slate-400 to-slate-500' },
   ];
 
   return (

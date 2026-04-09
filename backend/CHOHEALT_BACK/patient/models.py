@@ -39,6 +39,9 @@ class Patient(models.Model):
     gender = models.CharField(max_length=20, choices=GENDER_CHOICES, blank=True)
     blood_group = models.CharField(max_length=5, choices=BLOOD_GROUP_CHOICES, blank=True)
 
+    # Stripe
+    stripe_customer_id = models.CharField(max_length=255, blank=True)
+
     @property
     def full_name(self):
         parts = [self.first_name, self.second_name, self.first_last_name, self.second_last_name]

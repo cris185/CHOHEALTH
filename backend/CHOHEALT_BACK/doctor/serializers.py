@@ -1,5 +1,18 @@
 from rest_framework import serializers
-from .models import Doctor, DoctorSchedule, Notification
+from .models import Doctor, DoctorQualification, DoctorSchedule, Notification
+
+
+class DoctorQualificationSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorQualification
+        fields = ('sid', 'degree', 'institution', 'year', 'certificate')
+        read_only_fields = ('sid',)
+
+
+class DoctorQualificationCreateSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = DoctorQualification
+        fields = ('degree', 'institution', 'year', 'certificate')
 
 
 class DoctorScheduleSerializer(serializers.ModelSerializer):
@@ -7,12 +20,13 @@ class DoctorScheduleSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DoctorSchedule
-        fields = ('day_of_week', 'day_name', 'shift_type', 'start_time', 'end_time', 'break_start', 'break_end')
+        fields = ('day_of_week', 'day_name', 'start_time', 'end_time', 'break_start', 'break_end')
 
 
 class DoctorProfileSerializer(serializers.ModelSerializer):
     email = serializers.EmailField(source='user.email', read_only=True)
     full_name = serializers.CharField(read_only=True)
+    qualifications = DoctorQualificationSerializer(many=True, read_only=True)
 
     class Meta:
         model = Doctor
@@ -20,17 +34,13 @@ class DoctorProfileSerializer(serializers.ModelSerializer):
             'sid', 'email', 'full_name',
             'image', 'first_name', 'second_name', 'first_last_name', 'second_last_name',
             'mobile', 'country', 'bio',
-            'specialization', 'qualification', 'years_of_experience',
+            'specialization', 'years_of_experience',
+            'qualifications',
         )
-        read_only_fields = ('sid', 'email', 'full_name')
+        read_only_fields = ('sid', 'email', 'full_name', 'qualifications')
 
 
 class NotificationSerializer(serializers.ModelSerializer):
-    patient_name = serializers.SerializerMethodField()
-
     class Meta:
         model = Notification
-        fields = ('sid', 'type', 'message', 'is_read', 'created_at', 'patient_name')
-
-    def get_patient_name(self, obj):
-        return obj.patient.full_name if obj.patient else None
+        fields = ('sid', 'type', 'title', 'message', 'is_read', 'created_at', 'appointment')

@@ -7,12 +7,17 @@ import { useAuth } from '@/context/AuthContext';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
-import { Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical } from 'lucide-react';
+import { Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Pill, TestTubes } from 'lucide-react';
 
 const mainNav = [
   { key: 'dashboard', href: '/dashboard/patient', icon: Home, exact: true },
   { key: 'services', href: '/dashboard/patient/services', icon: FlaskConical },
   { key: 'appointments', href: '/dashboard/patient/appointments', icon: CalendarDays },
+];
+
+const healthNav = [
+  { key: 'medicine', href: '/dashboard/patient/medicine', icon: Pill },
+  { key: 'labs', href: '/dashboard/patient/labs', icon: TestTubes },
 ];
 
 const activityNav = [
@@ -62,6 +67,11 @@ export default function PatientSidebar() {
         <p className="mb-2 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">Main</p>
         <nav className="space-y-1">
           {mainNav.map(renderNavItem)}
+        </nav>
+
+        <p className="mb-2 mt-6 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">Health</p>
+        <nav className="space-y-1">
+          {healthNav.map(renderNavItem)}
         </nav>
 
         <p className="mb-2 mt-6 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">Activity</p>

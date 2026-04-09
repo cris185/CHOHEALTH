@@ -3,11 +3,16 @@ from django.contrib import admin
 from django.shortcuts import render, redirect
 from django.urls import path
 from django.contrib import messages
-from .models import Doctor, DoctorSchedule, Notification, DAY_OF_WEEK, SHIFT_TYPE
+from .models import Doctor, DoctorQualification, DoctorSchedule, Notification, DAY_OF_WEEK
 
 
 class DoctorScheduleInline(admin.TabularInline):
     model = DoctorSchedule
+    extra = 1
+
+
+class DoctorQualificationInline(admin.TabularInline):
+    model = DoctorQualification
     extra = 1
 
 
@@ -16,7 +21,14 @@ class DoctorAdmin(admin.ModelAdmin):
     list_display = ('first_name', 'first_last_name', 'specialization', 'years_of_experience')
     search_fields = ('first_name', 'first_last_name', 'specialization', 'user__email')
     list_filter = ('specialization', 'country')
-    inlines = [DoctorScheduleInline]
+    inlines = [DoctorQualificationInline, DoctorScheduleInline]
+
+
+@admin.register(DoctorQualification)
+class DoctorQualificationAdmin(admin.ModelAdmin):
+    list_display = ('doctor', 'degree', 'institution', 'year')
+    search_fields = ('doctor__first_name', 'doctor__first_last_name', 'degree', 'institution')
+    list_filter = ('year',)
 
 
 class BulkScheduleForm(forms.Form):
@@ -26,7 +38,6 @@ class BulkScheduleForm(forms.Form):
         widget=forms.CheckboxSelectMultiple,
         label='Days of the week',
     )
-    shift_type = forms.ChoiceField(choices=SHIFT_TYPE)
     start_time = forms.TimeField(widget=forms.TimeInput(attrs={'type': 'time'}))
     end_time = forms.TimeField(widget=forms.TimeInput(attrs={'type': 'time'}))
     break_start = forms.TimeField(widget=forms.TimeInput(attrs={'type': 'time'}), required=False)
@@ -35,8 +46,8 @@ class BulkScheduleForm(forms.Form):
 
 @admin.register(DoctorSchedule)
 class DoctorScheduleAdmin(admin.ModelAdmin):
-    list_display = ('doctor', 'day_of_week', 'shift_type', 'start_time', 'end_time', 'break_start', 'break_end', 'is_active')
-    list_filter = ('day_of_week', 'shift_type', 'is_active', 'doctor')
+    list_display = ('doctor', 'day_of_week', 'start_time', 'end_time', 'break_start', 'break_end', 'is_active')
+    list_filter = ('day_of_week', 'is_active', 'doctor')
     search_fields = ('doctor__first_name', 'doctor__first_last_name')
     change_list_template = 'admin/doctor/doctorschedule/change_list.html'
 
@@ -53,15 +64,14 @@ class DoctorScheduleAdmin(admin.ModelAdmin):
                 doctor = form.cleaned_data['doctor']
                 days = form.cleaned_data['days']
                 created = 0
-                skipped = 0
+                updated = 0
 
                 for day in days:
                     _, was_created = DoctorSchedule.objects.update_or_create(
                         doctor=doctor,
                         day_of_week=int(day),
-                        shift_type=form.cleaned_data['shift_type'],
+                        start_time=form.cleaned_data['start_time'],
                         defaults={
-                            'start_time': form.cleaned_data['start_time'],
                             'end_time': form.cleaned_data['end_time'],
                             'break_start': form.cleaned_data['break_start'],
                             'break_end': form.cleaned_data['break_end'],
@@ -71,11 +81,11 @@ class DoctorScheduleAdmin(admin.ModelAdmin):
                     if was_created:
                         created += 1
                     else:
-                        skipped += 1
+                        updated += 1
 
                 msg = f'{created} schedule(s) created'
-                if skipped:
-                    msg += f', {skipped} updated (already existed)'
+                if updated:
+                    msg += f', {updated} updated'
                 messages.success(request, msg)
                 return redirect('..')
         else:
@@ -90,6 +100,6 @@ class DoctorScheduleAdmin(admin.ModelAdmin):
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ('type', 'doctor', 'patient', 'is_read', 'created_at')
+    list_display = ('type', 'recipient', 'title', 'is_read', 'created_at')
     list_filter = ('type', 'is_read')
-    search_fields = ('doctor__first_name', 'doctor__first_last_name', 'patient__first_name', 'patient__first_last_name')
+    search_fields = ('recipient__email', 'title', 'message')

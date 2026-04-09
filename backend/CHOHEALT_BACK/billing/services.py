@@ -31,19 +31,20 @@ def create_invoice_for_appointment(appointment, tax_rate=Decimal('0')):
         )
         order += 1
 
-    # Line items for lab orders
+    # Line items for lab orders (iterate items within each order)
     if hasattr(appointment, 'medical_record'):
-        for lab_order in appointment.medical_record.lab_orders.select_related('test').all():
-            InvoiceLineItem.objects.create(
-                invoice=invoice,
-                description=lab_order.test.name,
-                quantity=1,
-                unit_price=lab_order.test.cost,
-                total=lab_order.test.cost,
-                lab_order=lab_order,
-                order=order,
-            )
-            order += 1
+        for lab_order in appointment.medical_record.lab_orders.prefetch_related('items__test').all():
+            for item in lab_order.items.all():
+                InvoiceLineItem.objects.create(
+                    invoice=invoice,
+                    description=item.test.name,
+                    quantity=1,
+                    unit_price=item.test.cost,
+                    total=item.test.cost,
+                    lab_order_item=item,
+                    order=order,
+                )
+                order += 1
 
     _recompute_totals(invoice)
     return invoice
@@ -52,7 +53,6 @@ def create_invoice_for_appointment(appointment, tax_rate=Decimal('0')):
 def recompute_invoice_balance(invoice):
     """
     Recalculates amount_paid and balance_due based on completed payments and refunds.
-    Call this after any Payment or Refund status change.
     """
     completed_payments = invoice.payments.filter(status='Completed')
     total_paid = sum(p.amount for p in completed_payments)
@@ -66,16 +66,10 @@ def recompute_invoice_balance(invoice):
     invoice.amount_paid = total_paid - total_refunded
     invoice.balance_due = invoice.total - invoice.amount_paid
 
-    # Update status based on balance
     if invoice.status == 'Void':
-        pass  # Don't change void invoices
+        pass
     elif invoice.balance_due <= 0 and invoice.amount_paid > 0:
-        if total_refunded > 0 and invoice.balance_due == 0:
-            invoice.status = 'Paid'
-        elif total_refunded > 0:
-            invoice.status = 'Refunded'
-        else:
-            invoice.status = 'Paid'
+        invoice.status = 'Paid'
     elif invoice.amount_paid > 0:
         invoice.status = 'Partially Paid'
     elif invoice.status not in ('Draft',):

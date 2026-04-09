@@ -83,7 +83,7 @@ def send_appointment_confirmation_email(appointment, invoice):
     # Format appointment details
     appt_date = appointment.date.strftime('%A, %B %d, %Y')
     appt_time = appointment.date.strftime('%I:%M %p')
-    doctor_name = f'Dr. {doctor.first_name} {doctor.first_last_name}'
+    doctor_name = f'Dr. {doctor.first_name} {doctor.first_last_name}' if doctor else 'Lab Service'
     mode = appointment.mode
     branch_info = ''
     if mode == 'In-Person' and appointment.branch:
@@ -125,7 +125,7 @@ def send_appointment_confirmation_email(appointment, invoice):
                 </tr>
                 <tr>
                     <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Specialization</td>
-                    <td style="color: #1e293b; padding: 6px 0; font-size: 14px; text-align: right; font-weight: 500;">{doctor.specialization}</td>
+                    <td style="color: #1e293b; padding: 6px 0; font-size: 14px; text-align: right; font-weight: 500;">{doctor.specialization if doctor else 'N/A'}</td>
                 </tr>
                 <tr>
                     <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Service</td>

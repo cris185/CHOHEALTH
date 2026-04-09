@@ -10,12 +10,14 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { Menu, Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical } from 'lucide-react';
+import { Menu, Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Pill, TestTubes } from 'lucide-react';
 
 const navItems = [
   { key: 'dashboard', href: '/dashboard/patient', icon: Home, exact: true },
   { key: 'services', href: '/dashboard/patient/services', icon: FlaskConical },
   { key: 'appointments', href: '/dashboard/patient/appointments', icon: CalendarDays },
+  { key: 'medicine', href: '/dashboard/patient/medicine', icon: Pill },
+  { key: 'labs', href: '/dashboard/patient/labs', icon: TestTubes },
   { key: 'notifications', href: '/dashboard/patient/notifications', icon: Bell },
   { key: 'payments', href: '/dashboard/patient/payments', icon: DollarSign },
   { key: 'profile', href: '/dashboard/patient/profile', icon: User },

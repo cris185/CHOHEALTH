@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { paymentFlow, branches as branchesApi, BranchItem, CreateAppointmentResponse } from '@/lib/api';
+import { paymentFlow, paymentMethods, branches as branchesApi, BranchItem, CreateAppointmentResponse, SavedCard } from '@/lib/api';
 
 interface BookingModalProps {
   isOpen: boolean;
@@ -36,6 +36,15 @@ export default function BookingModal({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [appointmentData, setAppointmentData] = useState<CreateAppointmentResponse | null>(null);
+  const [savedCards, setSavedCards] = useState<SavedCard[]>([]);
+  const [saveCard, setSaveCard] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      const token = localStorage.getItem('access_token') || '';
+      paymentMethods.listCards(token).then(setSavedCards).catch(() => setSavedCards([]));
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen && mode === 'In-Person') {
@@ -106,10 +115,26 @@ export default function BookingModal({
 
     const token = localStorage.getItem('access_token') || '';
     try {
-      const res = await paymentFlow.stripeCheckout(appointmentData.appointment_sid, token);
+      const res = await paymentFlow.stripeCheckout(appointmentData.appointment_sid, token, saveCard);
       window.location.href = res.checkout_url;
     } catch {
       setError('Error creating Stripe session.');
+      setLoading(false);
+    }
+  };
+
+  const handleSavedCardPayment = async (paymentMethodId: string) => {
+    if (!appointmentData) return;
+    setLoading(true);
+    setError('');
+
+    const token = localStorage.getItem('access_token') || '';
+    try {
+      await paymentFlow.stripeSavedCardPay(appointmentData.appointment_sid, paymentMethodId, token);
+      router.push(`/dashboard/patient/booking/success?appointment=${appointmentData.appointment_sid}`);
+    } catch (err: unknown) {
+      const apiError = err as { data?: { detail?: string } };
+      setError(apiError?.data?.detail || 'Payment failed.');
       setLoading(false);
     }
   };
@@ -247,7 +272,39 @@ export default function BookingModal({
             <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground text-center">Choose payment method</p>
 
             <div className="space-y-3">
-              {/* Stripe */}
+              {/* Saved Cards */}
+              {savedCards.length > 0 && (
+                <div className="space-y-2">
+                  <p className="text-xs font-medium text-muted-foreground">Saved Cards</p>
+                  {savedCards.map((card) => (
+                    <button
+                      key={card.id}
+                      onClick={() => handleSavedCardPayment(card.id)}
+                      disabled={loading}
+                      className="group flex w-full items-center gap-4 rounded-xl border-2 border-border px-5 py-3 transition-all duration-200 hover:border-primary hover:bg-primary/5 hover:shadow-sm disabled:opacity-50"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-slate-100 group-hover:bg-primary/10 transition-colors">
+                        <svg className="h-5 w-5 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+                        </svg>
+                      </div>
+                      <div className="text-left flex-1">
+                        <p className="text-sm font-semibold capitalize">{card.brand} •••• {card.last4}</p>
+                        <p className="text-xs text-muted-foreground">Expires {String(card.exp_month).padStart(2, '0')}/{card.exp_year} {card.is_default ? '(Default)' : ''}</p>
+                      </div>
+                      <svg className="h-5 w-5 text-muted-foreground/40 group-hover:text-primary transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                      </svg>
+                    </button>
+                  ))}
+                  <div className="relative py-2">
+                    <div className="absolute inset-0 flex items-center"><div className="w-full border-t" /></div>
+                    <div className="relative flex justify-center"><span className="bg-white px-3 text-xs text-muted-foreground">or pay with</span></div>
+                  </div>
+                </div>
+              )}
+
+              {/* Stripe (new card) */}
               <button
                 onClick={handleStripePayment}
                 disabled={loading}
@@ -266,6 +323,13 @@ export default function BookingModal({
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
+
+              {/* Save card checkbox */}
+              <label className="flex items-center gap-2 cursor-pointer px-1">
+                <input type="checkbox" checked={saveCard} onChange={(e) => setSaveCard(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary" />
+                <span className="text-xs text-muted-foreground">Save my card for future payments</span>
+              </label>
 
               {/* PayPal */}
               <button

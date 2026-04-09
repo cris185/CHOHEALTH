@@ -1,6 +1,7 @@
 import shortuuid
 from django.db import models
 from django.conf import settings
+from django.core.exceptions import ValidationError
 
 
 class Doctor(models.Model):
@@ -19,9 +20,7 @@ class Doctor(models.Model):
     country = models.CharField(max_length=100, blank=True)
     bio = models.TextField(blank=True)
     specialization = models.CharField(max_length=200)
-    qualification = models.CharField(max_length=300)
     years_of_experience = models.PositiveIntegerField(default=0)
-    next_available_appointment_date = models.DateTimeField(null=True, blank=True)
 
     @property
     def full_name(self):
@@ -32,10 +31,28 @@ class Doctor(models.Model):
         return f'Dr. {self.first_name} {self.first_last_name} - {self.specialization}'
 
 
-SHIFT_TYPE = (
-    ('Day', 'Day'),
-    ('Night', 'Night'),
-)
+# ============================================================================
+# Doctor Qualifications (structured, multiple per doctor)
+# ============================================================================
+
+class DoctorQualification(models.Model):
+    sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
+    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='qualifications')
+    degree = models.CharField(max_length=200)
+    institution = models.CharField(max_length=300)
+    year = models.PositiveIntegerField(null=True, blank=True)
+    certificate = models.FileField(upload_to='doctor_certificates', blank=True)
+
+    class Meta:
+        ordering = ['-year']
+
+    def __str__(self):
+        return f'{self.degree} - {self.institution} ({self.year})'
+
+
+# ============================================================================
+# Doctor Schedule (flexible, multiple blocks per day)
+# ============================================================================
 
 DAY_OF_WEEK = (
     (0, 'Monday'),
@@ -52,7 +69,6 @@ class DoctorSchedule(models.Model):
     sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
     doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='schedules')
     day_of_week = models.IntegerField(choices=DAY_OF_WEEK)
-    shift_type = models.CharField(max_length=10, choices=SHIFT_TYPE, default='Day')
     start_time = models.TimeField()
     end_time = models.TimeField()
     break_start = models.TimeField(null=True, blank=True)
@@ -60,31 +76,54 @@ class DoctorSchedule(models.Model):
     is_active = models.BooleanField(default=True)
 
     class Meta:
-        unique_together = ('doctor', 'day_of_week', 'shift_type')
         ordering = ['day_of_week', 'start_time']
 
-    def __str__(self):
-        return f'Dr. {self.doctor.first_name} {self.doctor.first_last_name} - {self.get_day_of_week_display()} ({self.shift_type}) {self.start_time}-{self.end_time}'
+    def clean(self):
+        if self.start_time >= self.end_time:
+            raise ValidationError('Start time must be before end time.')
+        if self.break_start and self.break_end:
+            if self.break_start >= self.break_end:
+                raise ValidationError('Break start must be before break end.')
+            if self.break_start < self.start_time or self.break_end > self.end_time:
+                raise ValidationError('Break must be within working hours.')
 
+    def __str__(self):
+        return f'Dr. {self.doctor.first_name} {self.doctor.first_last_name} - {self.get_day_of_week_display()} {self.start_time}-{self.end_time}'
+
+
+# ============================================================================
+# Notification (generic, recipient-based)
+# ============================================================================
 
 NOTIFICATION_TYPE = (
     ('New Appointment', 'New Appointment'),
+    ('Appointment Confirmed', 'Appointment Confirmed'),
     ('Appointment Cancelled', 'Appointment Cancelled'),
+    ('Appointment Completed', 'Appointment Completed'),
     ('Appointment Rescheduled', 'Appointment Rescheduled'),
+    ('Payment Received', 'Payment Received'),
+    ('Lab Results Ready', 'Lab Results Ready'),
+    ('Medical Record Available', 'Medical Record Available'),
+    ('Prescription Ready', 'Prescription Ready'),
+    ('Lab Order Created', 'Lab Order Created'),
+    ('Medication Ready for Pickup', 'Medication Ready for Pickup'),
+    ('Medication Dispatched', 'Medication Dispatched'),
+    ('Medication Delivered', 'Medication Delivered'),
 )
 
 
 class Notification(models.Model):
     sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
-    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='notifications')
-    patient = models.ForeignKey('patient.Patient', on_delete=models.CASCADE, related_name='notifications')
+    recipient = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='notifications')
     type = models.CharField(max_length=50, choices=NOTIFICATION_TYPE)
+    title = models.CharField(max_length=200)
     message = models.TextField()
     is_read = models.BooleanField(default=False)
+    appointment = models.ForeignKey('base.Appointment', on_delete=models.SET_NULL, null=True, blank=True, related_name='notifications')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
         ordering = ['-created_at']
 
     def __str__(self):
-        return f'{self.type} - Dr. {self.doctor.first_name} {self.doctor.first_last_name}'
+        return f'{self.type} - {self.recipient.email}'
