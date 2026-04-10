@@ -1,10 +1,13 @@
 from io import BytesIO
+from pathlib import Path
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.units import inch
 from reportlab.lib import colors
-from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable
+from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer, HRFlowable, Image
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
 from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+
+LOGO_PATH = Path(__file__).resolve().parent.parent.parent / 'static' / 'logo.png'
 
 
 def generate_invoice_pdf(invoice) -> bytes:
@@ -28,10 +31,15 @@ def generate_invoice_pdf(invoice) -> bytes:
 
     elements = []
 
-    # Header
+    # Header with logo
+    logo_cell = Paragraph('CHO Health', styles['Brand'])
+    if LOGO_PATH.exists():
+        logo_cell = Image(str(LOGO_PATH), width=1.2 * inch, height=1.2 * inch)
+
     elements.append(Table(
-        [[Paragraph('CHO Health', styles['Brand']), Paragraph('INVOICE', styles['InvoiceTitle'])]],
+        [[logo_cell, Paragraph('INVOICE', styles['InvoiceTitle'])]],
         colWidths=[3.5 * inch, 3.5 * inch],
+        style=TableStyle([('VALIGN', (0, 0), (-1, -1), 'MIDDLE')]),
     ))
     elements.append(Spacer(1, 4))
     elements.append(Table(

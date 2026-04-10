@@ -6,6 +6,32 @@ import { appointments as appointmentsApi, DoctorAppointmentDetail } from '@/lib/
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
+function getInitials(name: string): string {
+  const parts = name.split(' ').filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  // first_name [second_name] first_last_name [second_last_name]
+  const firstInitial = parts[0][0];
+  const lastInitial = parts.length >= 3 ? parts[2][0] : parts[1][0];
+  return (firstInitial + lastInitial).toUpperCase();
+}
+
+function PatientAvatar({ src, name, size = 'lg' }: { src: string | null; name: string; size?: 'sm' | 'lg' }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = getInitials(name);
+  const sizeClass = size === 'lg' ? 'h-16 w-16' : 'h-6 w-6';
+  const textClass = size === 'lg' ? 'text-lg' : 'text-[9px]';
+
+  if (src && !imgError) {
+    return <img src={src} alt={name} className={`${sizeClass} rounded-full object-cover`} onError={() => setImgError(true)} />;
+  }
+  return (
+    <div className={`flex ${sizeClass} items-center justify-center rounded-full bg-blue-100`}>
+      <span className={`${textClass} font-bold text-blue-600`}>{initials}</span>
+    </div>
+  );
+}
+
 interface AppointmentDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -60,15 +86,7 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
           <div className="p-4 space-y-4">
             {/* Patient info */}
             <div className="flex items-center gap-4">
-              {patientImage ? (
-                <img src={patientImage} alt={detail.patient_name} className="h-16 w-16 rounded-full object-cover" />
-              ) : (
-                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
-                  <svg className="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
-                </div>
-              )}
+              <PatientAvatar src={patientImage} name={detail.patient_name} size="lg" />
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">{detail.patient_name}</h3>
                 <p className="text-sm text-gray-500">{detail.patient_email}</p>

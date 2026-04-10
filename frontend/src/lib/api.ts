@@ -213,10 +213,27 @@ export interface ScheduleBlock {
   break_end: string | null;
 }
 
+export interface SlotSummary {
+  total_slots: number;
+  booked_slots: number;
+  available_slots: number;
+  break_slots: number;
+  occupancy_percent: number;
+}
+
+export interface DayInfo {
+  date: string;
+  total_slots: number;
+  booked_slots: number;
+  available_slots: number;
+  occupancy_percent: number;
+}
+
 export interface DayAvailability {
   date: string;
   schedules: ScheduleBlock[];
   slots: TimeSlot[];
+  summary: SlotSummary;
 }
 
 export interface BranchItem {
@@ -255,7 +272,7 @@ export const doctors = {
   schedule: (sid: string): Promise<DoctorScheduleEntry[]> =>
     fetchAPI(`/doctors/${sid}/schedule/`),
 
-  availableDays: (sid: string, month: string, serviceSid: string): Promise<string[]> =>
+  availableDays: (sid: string, month: string, serviceSid: string): Promise<DayInfo[]> =>
     fetchAPI(`/doctors/${sid}/available-days/?month=${month}&service_sid=${serviceSid}`),
 
   availableSlots: (sid: string, date: string, serviceSid: string): Promise<DayAvailability> =>
@@ -296,6 +313,9 @@ export const appointments = {
 
   doctorList: (token: string, date?: string): Promise<DoctorAppointmentItem[]> =>
     fetchAPI(`/appointments/doctor/${date ? `?date=${date}` : ''}`, { token }),
+
+  doctorListByMonth: (token: string, month: string): Promise<DoctorAppointmentItem[]> =>
+    fetchAPI(`/appointments/doctor/?month=${month}`, { token }),
 
   doctorDetail: (sid: string, token: string): Promise<DoctorAppointmentDetail> =>
     fetchAPI(`/appointments/doctor/${sid}/`, { token }),

@@ -1,9 +1,33 @@
 'use client';
 
+import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { DoctorAppointmentItem } from '@/lib/api';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
+
+function getInitials(name: string): string {
+  const parts = name.split(' ').filter(Boolean);
+  if (parts.length === 0) return '';
+  if (parts.length === 1) return parts[0][0].toUpperCase();
+  const firstInitial = parts[0][0];
+  const lastInitial = parts.length >= 3 ? parts[2][0] : parts[1][0];
+  return (firstInitial + lastInitial).toUpperCase();
+}
+
+function PatientAvatar({ src, name }: { src: string | null; name: string }) {
+  const [imgError, setImgError] = useState(false);
+  const initials = getInitials(name);
+
+  if (src && !imgError) {
+    return <img src={src} alt="" className="h-6 w-6 rounded-full object-cover" onError={() => setImgError(true)} />;
+  }
+  return (
+    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-blue-100">
+      <span className="text-[9px] font-bold text-blue-600">{initials}</span>
+    </div>
+  );
+}
 
 interface DoctorDayCalendarProps {
   date: string;
@@ -124,15 +148,7 @@ export default function DoctorDayCalendar({
               onClick={() => onAppointmentClick(appt.sid)}
             >
               <div className="flex items-center gap-2">
-                {patientImage ? (
-                  <img src={patientImage} alt="" className="h-6 w-6 rounded-full object-cover" />
-                ) : (
-                  <div className="flex h-6 w-6 items-center justify-center rounded-full bg-gray-200">
-                    <svg className="h-3 w-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                    </svg>
-                  </div>
-                )}
+                <PatientAvatar src={patientImage} name={appt.patient_name} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-semibold">{appt.patient_name}</p>
                   <p className="truncate text-[10px]">{appt.apptTime} &middot; {appt.service_name} &middot; {appt.service_duration}min</p>

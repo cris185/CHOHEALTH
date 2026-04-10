@@ -31,13 +31,22 @@ FRONTEND_URL = settings.FRONTEND_URL
 
 
 def _create_appointment_notification(appointment):
-    """Create notification for doctor when appointment is booked."""
+    """Create notifications for doctor and patient when appointment is confirmed."""
     if appointment.doctor:
         Notification.objects.create(
             recipient=appointment.doctor.user,
             type='New Appointment',
             title='New Appointment Booked',
             message=f'New appointment booked by {appointment.patient.full_name} for {appointment.service.name if appointment.service else "service"} on {appointment.date.strftime("%b %d, %Y at %I:%M %p")}',
+            appointment=appointment,
+        )
+    if appointment.patient:
+        doctor_name = f'Dr. {appointment.doctor.first_name} {appointment.doctor.first_last_name}' if appointment.doctor else 'Lab Service'
+        Notification.objects.create(
+            recipient=appointment.patient.user,
+            type='Appointment Confirmed',
+            title='Appointment Confirmed',
+            message=f'Your appointment with {doctor_name} for {appointment.service.name if appointment.service else "service"} on {appointment.date.strftime("%b %d, %Y at %I:%M %p")} has been confirmed.',
             appointment=appointment,
         )
 
@@ -234,10 +243,12 @@ class StripeSavedCardPayView(APIView):
 
 
 def _process_payment_success(appointment, invoice, payment_method, gateway_charge_id, gateway_response):
-    """Shared logic for processing successful payment (Stripe + PayPal)."""
+    """Shared logic for processing successful payment (Stripe + PayPal).
+    Returns True if the payment was actually processed, False if already handled (idempotent).
+    """
     # Check idempotency
     if Payment.objects.filter(gateway_charge_id=gateway_charge_id).exists():
-        return
+        return False
 
     Payment.objects.create(
         invoice=invoice,
@@ -255,8 +266,11 @@ def _process_payment_success(appointment, invoice, payment_method, gateway_charg
     invoice.issued_at = timezone.now()
     invoice.save()
 
+    appointment.status = 'Confirmed'
+    appointment.save()
+
     _create_appointment_notification(appointment)
-    send_appointment_confirmation_email(appointment, invoice)
+    return True
 
 
 class StripeVerifyPaymentView(APIView):
@@ -330,8 +344,16 @@ class StripeWebhookView(APIView):
 
     @transaction.atomic
     def _handle_checkout_completed(self, session):
-        appointment_sid = session.get('metadata', {}).get('appointment_sid')
-        invoice_sid = session.get('metadata', {}).get('invoice_sid')
+        # session can be a Stripe object (from construct_event) or a dict (from json.loads)
+        if isinstance(session, dict):
+            metadata = session.get('metadata', {})
+            payment_intent = session.get('payment_intent', '')
+        else:
+            metadata = session.metadata or {}
+            payment_intent = session.payment_intent or ''
+
+        appointment_sid = metadata.get('appointment_sid') if isinstance(metadata, dict) else getattr(metadata, 'appointment_sid', None)
+        invoice_sid = metadata.get('invoice_sid') if isinstance(metadata, dict) else getattr(metadata, 'invoice_sid', None)
 
         if not appointment_sid or not invoice_sid:
             return
@@ -345,10 +367,12 @@ class StripeWebhookView(APIView):
         if invoice.status == 'Paid':
             return
 
-        _process_payment_success(
+        processed = _process_payment_success(
             appointment, invoice, 'stripe',
-            session.get('payment_intent', ''), session
+            payment_intent, {'session_id': session['id'] if isinstance(session, dict) else session.id}
         )
+        if processed:
+            send_appointment_confirmation_email(appointment, invoice)
 
 
 class PayPalCreateOrderView(APIView):

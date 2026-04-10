@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
-import { notifications as notificationsApi, NotificationItem } from '@/lib/api';
+import { notifications as notificationsApi, patientNotifications as patientNotificationsApi, NotificationItem } from '@/lib/api';
 import { useAuth } from '@/context/AuthContext';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { Badge } from '@/components/ui/badge';
@@ -21,8 +21,7 @@ export default function NotificationBell() {
     const token = localStorage.getItem('access_token');
     if (!token) return;
 
-    const endpoint = user?.user_type === 'Doctor' ? 'notifications' : 'patientNotifications';
-    const api = user?.user_type === 'Doctor' ? notificationsApi : notificationsApi;
+    const api = user?.user_type === 'Doctor' ? notificationsApi : patientNotificationsApi;
 
     api.list(token, { status: 'unread', page: 1 })
       .then((data) => {

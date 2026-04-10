@@ -178,7 +178,23 @@
     "date": "Date",
     "time": "Time",
     "duration": "Duration",
-    "today": "Today"
+    "today": "Today",
+    "backToCalendar": "Back to Calendar",
+    "slotsAvailable": "{count} slots available",
+    "full": "Full",
+    "open": "Open",
+    "occupied": "{percent}% occupied",
+    "occupancyBar": "{available} of {total} slots available",
+    "notAvailable": "Not available",
+    "clickToView": "Click a day to view available times",
+    "legendOpen": "Open",
+    "legendModerate": "Moderate",
+    "legendBusy": "Busy",
+    "legendAlmostFull": "Almost Full",
+    "legendFull": "Full",
+    "slotsLeft": "{count} left",
+    "slot": "slot",
+    "slots": "slots"
   },
   "dashboard": {
     "patient": {
@@ -217,6 +233,12 @@
       "yourInfo": "Your Information",
       "noRating": "No ratings yet",
       "schedule": "Schedule",
+      "appointmentsPage": {
+        "noAppointments": "No appointments on this day",
+        "appointmentCount": "{count} appointment(s)",
+        "selectDayPrompt": "Select a day to view appointments",
+        "hasAppointments": "{count} appt"
+      },
       "nav": {
         "dashboard": "Dashboard",
         "appointments": "Appointments",

@@ -56,12 +56,19 @@ class DoctorAppointmentListView(generics.ListAPIView):
 
     def get_queryset(self):
         date_param = self.request.query_params.get('date')
+        month_param = self.request.query_params.get('month')
         qs = Appointment.objects.filter(
             doctor=self.request.user.doctor
         ).select_related('patient', 'patient__user', 'service', 'branch')
 
         if date_param:
             qs = qs.filter(date__date=date_param)
+        elif month_param:
+            try:
+                year, month = map(int, month_param.split('-'))
+                qs = qs.filter(date__year=year, date__month=month)
+            except (ValueError, AttributeError):
+                pass
 
         return qs
 

@@ -1,14 +1,41 @@
 import base64
 import logging
+from pathlib import Path
 from sendgrid import SendGridAPIClient
 from sendgrid.helpers.mail import (
-    Mail, Attachment, FileContent, FileName, FileType, Disposition,
+    Mail, Attachment, FileContent, FileName, FileType, Disposition, ContentId,
 )
 from django.conf import settings
 
 from .pdf_invoice import generate_invoice_pdf
 
 logger = logging.getLogger(__name__)
+
+LOGO_PATH = Path(__file__).resolve().parent.parent.parent / 'static' / 'logo.png'
+
+
+def _get_logo_b64() -> str:
+    """Return base64-encoded logo, cached at module level."""
+    if not hasattr(_get_logo_b64, '_cache'):
+        try:
+            _get_logo_b64._cache = base64.b64encode(LOGO_PATH.read_bytes()).decode()
+        except Exception:
+            _get_logo_b64._cache = ''
+    return _get_logo_b64._cache
+
+
+def _logo_attachment() -> Attachment | None:
+    """Create a SendGrid inline attachment for the logo (CID: logo)."""
+    b64 = _get_logo_b64()
+    if not b64:
+        return None
+    att = Attachment()
+    att.file_content = FileContent(b64)
+    att.file_name = FileName('logo.png')
+    att.file_type = FileType('image/png')
+    att.disposition = Disposition('inline')
+    att.content_id = ContentId('logo')
+    return att
 
 
 def send_email(to_email, subject, html_content, attachments=None):
@@ -39,10 +66,7 @@ def send_password_reset_email(user, token):
     html = f'''
     <div style="font-family: Inter, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
         <div style="text-align: center; margin-bottom: 32px;">
-            <div style="display: inline-block; background: #2563EB; border-radius: 12px; padding: 10px; margin-bottom: 12px;">
-                <span style="color: white; font-size: 20px;">❤</span>
-            </div>
-            <h1 style="color: #1e293b; font-size: 22px; margin: 0;">CHO Health</h1>
+            <img src="cid:logo" alt="CHO Health" style="height: 120px; width: auto; margin-bottom: 8px;" />
         </div>
 
         <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 16px; padding: 32px; text-align: center;">
@@ -71,6 +95,7 @@ def send_password_reset_email(user, token):
         to_email=user.email,
         subject='CHO Health - Reset Your Password',
         html_content=html,
+        attachments=[a for a in [_logo_attachment()] if a],
     )
 
 
@@ -101,10 +126,7 @@ def send_appointment_confirmation_email(appointment, invoice):
     html = f'''
     <div style="font-family: Inter, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
         <div style="text-align: center; margin-bottom: 32px;">
-            <div style="display: inline-block; background: #2563EB; border-radius: 12px; padding: 10px; margin-bottom: 12px;">
-                <span style="color: white; font-size: 20px;">❤</span>
-            </div>
-            <h1 style="color: #1e293b; font-size: 22px; margin: 0;">CHO Health</h1>
+            <img src="cid:logo" alt="CHO Health" style="height: 120px; width: auto; margin-bottom: 8px;" />
         </div>
 
         <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 24px;">
@@ -175,18 +197,20 @@ def send_appointment_confirmation_email(appointment, invoice):
     try:
         pdf_bytes = generate_invoice_pdf(invoice)
         encoded_pdf = base64.b64encode(pdf_bytes).decode()
-        attachment = Attachment(
+        pdf_attachment = Attachment(
             FileContent(encoded_pdf),
             FileName(f'Invoice-{invoice.invoice_number}.pdf'),
             FileType('application/pdf'),
             Disposition('attachment'),
         )
 
+        attachments = [a for a in [_logo_attachment(), pdf_attachment] if a]
+
         send_email(
             to_email=patient.user.email,
             subject=f'CHO Health - Appointment Confirmation & Invoice #{invoice.invoice_number}',
             html_content=html,
-            attachments=[attachment],
+            attachments=attachments,
         )
     except Exception as e:
         logger.error(f'Failed to send appointment confirmation: {e}')
@@ -195,4 +219,5 @@ def send_appointment_confirmation_email(appointment, invoice):
             to_email=patient.user.email,
             subject=f'CHO Health - Appointment Confirmation & Invoice #{invoice.invoice_number}',
             html_content=html,
+            attachments=[a for a in [_logo_attachment()] if a],
         )

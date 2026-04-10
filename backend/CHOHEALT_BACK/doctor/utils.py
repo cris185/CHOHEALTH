@@ -87,13 +87,31 @@ def get_available_slots(doctor: Doctor, date, service: Service) -> dict:
             'break_end': schedule.break_end.strftime('%H:%M') if schedule.break_end else None,
         })
 
-    return {'schedules': schedule_data, 'slots': all_slots}
+    # Build summary
+    bookable_slots = [s for s in all_slots if not s['is_break']]
+    total_slots = len(bookable_slots)
+    booked_slots = sum(1 for s in bookable_slots if s['is_booked'])
+    available_slots = sum(1 for s in all_slots if s['available'])
+    break_slots = sum(1 for s in all_slots if s['is_break'])
+    occupancy_percent = round((booked_slots / total_slots) * 100, 1) if total_slots > 0 else 0
+
+    return {
+        'schedules': schedule_data,
+        'slots': all_slots,
+        'summary': {
+            'total_slots': total_slots,
+            'booked_slots': booked_slots,
+            'available_slots': available_slots,
+            'break_slots': break_slots,
+            'occupancy_percent': occupancy_percent,
+        },
+    }
 
 
-def get_available_days(doctor: Doctor, year: int, month: int, service: Service) -> list[str]:
+def get_available_days(doctor: Doctor, year: int, month: int, service: Service) -> list[dict]:
     """
-    Returns list of date strings (YYYY-MM-DD) where the doctor has
-    at least one available slot in the given month.
+    Returns list of dicts with date and occupancy info where the doctor
+    has a schedule in the given month (including fully-booked days).
     """
     import calendar
 
@@ -107,7 +125,7 @@ def get_available_days(doctor: Doctor, year: int, month: int, service: Service) 
 
     num_days = calendar.monthrange(year, month)[1]
     today = timezone.now().astimezone(tz).date()
-    available = []
+    days_info = []
 
     for day in range(1, num_days + 1):
         d = datetime(year, month, day).date()
@@ -115,7 +133,15 @@ def get_available_days(doctor: Doctor, year: int, month: int, service: Service) 
             continue
         if d.weekday() in working_days:
             result = get_available_slots(doctor, d, service)
-            if any(s['available'] for s in result['slots']):
-                available.append(d.isoformat())
+            summary = result['summary']
+            # Include all working days (even fully booked ones)
+            if summary['total_slots'] > 0:
+                days_info.append({
+                    'date': d.isoformat(),
+                    'total_slots': summary['total_slots'],
+                    'booked_slots': summary['booked_slots'],
+                    'available_slots': summary['available_slots'],
+                    'occupancy_percent': summary['occupancy_percent'],
+                })
 
-    return available
+    return days_info

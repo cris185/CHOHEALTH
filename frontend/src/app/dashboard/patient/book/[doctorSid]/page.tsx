@@ -5,10 +5,8 @@ import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
-import { doctors as doctorsApi, services as servicesApi, Service, DayAvailability } from '@/lib/api';
+import { doctors as doctorsApi, services as servicesApi, Service, DayInfo } from '@/lib/api';
 import MonthCalendar from '@/components/booking/MonthCalendar';
-import DaySchedule from '@/components/booking/DaySchedule';
-import BookingModal from '@/components/booking/BookingModal';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -26,15 +24,9 @@ export default function BookingPage() {
   const now = new Date();
   const [calYear, setCalYear] = useState(now.getFullYear());
   const [calMonth, setCalMonth] = useState(now.getMonth());
-  const [availableDays, setAvailableDays] = useState<string[]>([]);
+  const [availableDays, setAvailableDays] = useState<DayInfo[]>([]);
   const [calLoading, setCalLoading] = useState(true);
-
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
-  const [dayData, setDayData] = useState<DayAvailability | null>(null);
-  const [dayLoading, setDayLoading] = useState(false);
-
-  const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
-  const [modalOpen, setModalOpen] = useState(false);
 
   // Auth guard
   useEffect(() => {
@@ -65,29 +57,16 @@ export default function BookingPage() {
     }
   }, [doctorSid, serviceSid, calYear, calMonth]);
 
-  // Load day slots when date selected
-  useEffect(() => {
-    if (selectedDate && doctorSid && serviceSid) {
-      setDayLoading(true);
-      setSelectedSlot(null);
-      doctorsApi.availableSlots(doctorSid, selectedDate, serviceSid)
-        .then(setDayData)
-        .catch(() => setDayData(null))
-        .finally(() => setDayLoading(false));
-    }
-  }, [selectedDate, doctorSid, serviceSid]);
-
-  const handleSlotSelect = (time: string) => {
-    setSelectedSlot(time);
-    setModalOpen(true);
+  // Navigate to day timeline when a date is selected
+  const handleSelectDate = (date: string) => {
+    setSelectedDate(date);
+    router.push(`/dashboard/patient/book/${doctorSid}/${date}?service=${serviceSid}`);
   };
 
   const handleMonthChange = (year: number, month: number) => {
     setCalYear(year);
     setCalMonth(month);
     setSelectedDate(null);
-    setDayData(null);
-    setSelectedSlot(null);
   };
 
   if (authLoading || !user || !service || !selectedDoctor) {
@@ -104,7 +83,7 @@ export default function BookingPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-4xl px-4 py-8">
         <Link href={`/dashboard/patient/services/${serviceSid}`}
           className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-500 mb-6">
           <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -116,7 +95,7 @@ export default function BookingPage() {
         <h1 className="text-2xl font-bold text-gray-900 mb-6">{t('booking.title')}</h1>
 
         {/* Doctor + Service Info */}
-        <div className="mb-8 flex items-center gap-4 rounded-lg bg-white p-4 shadow">
+        <div className="mb-8 flex items-center gap-4 rounded-xl bg-white p-5 shadow-sm border border-gray-100">
           {doctorImage ? (
             <img src={doctorImage} alt={selectedDoctor.full_name} className="h-16 w-16 rounded-full object-cover" />
           ) : (
@@ -133,55 +112,20 @@ export default function BookingPage() {
           </div>
         </div>
 
-        <div className="grid gap-8 lg:grid-cols-2">
-          {/* Calendar */}
-          <div>
-            <h3 className="mb-3 text-sm font-medium text-gray-700">{t('booking.selectDate')}</h3>
-            <MonthCalendar
-              year={calYear}
-              month={calMonth}
-              availableDays={availableDays}
-              selectedDate={selectedDate}
-              onSelectDate={setSelectedDate}
-              onMonthChange={handleMonthChange}
-              loading={calLoading}
-            />
-          </div>
-
-          {/* Day Schedule */}
-          <div>
-            {selectedDate ? (
-              <>
-                <h3 className="mb-3 text-sm font-medium text-gray-700">{t('booking.selectTime')}</h3>
-                <DaySchedule
-                  date={selectedDate}
-                  slots={dayData?.slots || []}
-                  selectedSlot={selectedSlot}
-                  onSelectSlot={handleSlotSelect}
-                  loading={dayLoading}
-                />
-              </>
-            ) : (
-              <div className="flex h-full items-center justify-center rounded-lg bg-white p-6 shadow">
-                <p className="text-gray-400">{t('booking.selectDate')}</p>
-              </div>
-            )}
-          </div>
+        {/* Calendar — full width */}
+        <div>
+          <h3 className="mb-3 text-sm font-medium text-gray-700">{t('booking.selectDate')}</h3>
+          <MonthCalendar
+            year={calYear}
+            month={calMonth}
+            availableDays={availableDays}
+            selectedDate={selectedDate}
+            onSelectDate={handleSelectDate}
+            onMonthChange={handleMonthChange}
+            loading={calLoading}
+          />
+          <p className="mt-3 text-center text-xs text-gray-400">{t('booking.clickToView')}</p>
         </div>
-
-        {/* Booking Modal */}
-        <BookingModal
-          isOpen={modalOpen}
-          onClose={() => setModalOpen(false)}
-          doctorSid={doctorSid}
-          serviceSid={serviceSid}
-          date={selectedDate || ''}
-          time={selectedSlot || ''}
-          doctorName={`Dr. ${selectedDoctor.full_name}`}
-          serviceName={service.name}
-          serviceDuration={service.duration_minutes}
-          serviceCost={service.cost}
-        />
       </main>
     </div>
   );

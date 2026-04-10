@@ -178,7 +178,23 @@
     "date": "Date",
     "time": "Time",
     "duration": "Duration",
-    "today": "Today"
+    "today": "Today",
+    "backToCalendar": "Volver al Calendario",
+    "slotsAvailable": "{count} horarios disponibles",
+    "full": "Lleno",
+    "open": "Abierto",
+    "occupied": "{percent}% ocupado",
+    "occupancyBar": "{available} de {total} horarios disponibles",
+    "notAvailable": "No disponible",
+    "clickToView": "Selecciona un día para ver los horarios",
+    "legendOpen": "Disponible",
+    "legendModerate": "Moderado",
+    "legendBusy": "Ocupado",
+    "legendAlmostFull": "Casi lleno",
+    "legendFull": "Lleno",
+    "slotsLeft": "{count} disp.",
+    "slot": "horario",
+    "slots": "horarios"
   },
   "dashboard": {
     "patient": {
@@ -217,6 +233,12 @@
       "yourInfo": "Your Information",
       "noRating": "No ratings yet",
       "schedule": "Schedule",
+      "appointmentsPage": {
+        "noAppointments": "No hay citas este d\u00eda",
+        "appointmentCount": "{count} cita(s)",
+        "selectDayPrompt": "Selecciona un d\u00eda para ver las citas",
+        "hasAppointments": "{count} cita"
+      },
       "nav": {
         "dashboard": "Dashboard",
         "appointments": "Appointments",
