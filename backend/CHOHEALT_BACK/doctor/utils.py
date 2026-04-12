@@ -9,14 +9,23 @@ from base.models import Appointment, Service
 
 tz = zoneinfo.ZoneInfo(settings.TIME_ZONE)
 
-# Statuses that block a time slot
-BLOCKING_STATUSES = ['Scheduled', 'Confirmed', 'In Progress']
+# Statuses that block a time slot. Unpaid is NOT here — unpaid appointments
+# don't reserve slots, they only become blocking once payment confirms.
+BLOCKING_STATUSES = ['Confirmed', 'In Progress']
+
+# Fixed visual interval for the timeline. Slots are always shown every 30 min
+# regardless of service duration. The backend still checks whether the FULL
+# service fits (duration, break, shift end, booked conflicts).
+SLOT_INTERVAL_MINUTES = 30
 
 
 def get_available_slots(doctor: Doctor, date, service: Service) -> dict:
     """
     Compute available time slots for a doctor on a specific date.
-    Handles MULTIPLE schedule blocks per day (e.g., morning + afternoon).
+    Slots are generated at FIXED 30-minute intervals. For each slot we check
+    whether the full service duration fits without overlapping a break, exceeding
+    the shift end, or conflicting with an existing appointment. The slot carries
+    an `unavailable_reason` so the frontend can display a helpful message.
     """
     day_of_week = date.weekday()
     schedules = DoctorSchedule.objects.filter(
@@ -24,9 +33,10 @@ def get_available_slots(doctor: Doctor, date, service: Service) -> dict:
     ).order_by('start_time')
 
     if not schedules.exists():
-        return {'schedules': [], 'slots': []}
+        return {'schedules': [], 'slots': [], 'summary': _empty_summary()}
 
-    duration = timedelta(minutes=service.duration_minutes)
+    service_duration = timedelta(minutes=service.duration_minutes)
+    step = timedelta(minutes=SLOT_INTERVAL_MINUTES)
 
     # Get all booked appointments for this doctor on this date (one query)
     day_start = datetime.combine(date, time.min).replace(tzinfo=tz)
@@ -49,36 +59,46 @@ def get_available_slots(doctor: Doctor, date, service: Service) -> dict:
     all_slots = []
     schedule_data = []
 
-    # Iterate ALL schedule blocks for the day
     for schedule in schedules:
-        current = datetime.combine(date, schedule.start_time).replace(tzinfo=tz)
-        end = datetime.combine(date, schedule.end_time).replace(tzinfo=tz)
+        sched_start = datetime.combine(date, schedule.start_time).replace(tzinfo=tz)
+        sched_end = datetime.combine(date, schedule.end_time).replace(tzinfo=tz)
         break_start = datetime.combine(date, schedule.break_start).replace(tzinfo=tz) if schedule.break_start else None
         break_end = datetime.combine(date, schedule.break_end).replace(tzinfo=tz) if schedule.break_end else None
 
-        while current + duration <= end:
-            slot_end = current + duration
+        current = sched_start
+        while current < sched_end:
+            slot_end = current + service_duration
 
-            is_break = False
-            if break_start and break_end:
-                if current < break_end and slot_end > break_start:
-                    is_break = True
+            # Determine availability and the reason if not available.
+            unavailable_reason = None
 
-            is_booked = any(
-                current < booked_end and slot_end > booked_start
-                for booked_start, booked_end in booked_ranges
-            )
+            if current <= now:
+                unavailable_reason = 'past'
+            elif slot_end > sched_end:
+                # Service extends beyond the doctor's shift end.
+                unavailable_reason = 'shift_end'
+            elif break_start and break_end and current < break_end and slot_end > break_start:
+                # Service overlaps with the doctor's break.
+                unavailable_reason = 'break'
+            else:
+                # Check overlap with existing confirmed appointments.
+                for booked_start, booked_end in booked_ranges:
+                    if current < booked_end and slot_end > booked_start:
+                        unavailable_reason = 'booked'
+                        break
 
-            is_past = current <= now
+            is_break = unavailable_reason == 'break'
+            is_booked = unavailable_reason == 'booked'
 
             all_slots.append({
                 'time': current.strftime('%H:%M'),
-                'available': not is_break and not is_booked and not is_past,
+                'available': unavailable_reason is None,
                 'is_break': is_break,
                 'is_booked': is_booked,
+                'unavailable_reason': unavailable_reason,
             })
 
-            current += duration
+            current += step
 
         schedule_data.append({
             'start_time': schedule.start_time.strftime('%H:%M'),
@@ -105,6 +125,16 @@ def get_available_slots(doctor: Doctor, date, service: Service) -> dict:
             'break_slots': break_slots,
             'occupancy_percent': occupancy_percent,
         },
+    }
+
+
+def _empty_summary():
+    return {
+        'total_slots': 0,
+        'booked_slots': 0,
+        'available_slots': 0,
+        'break_slots': 0,
+        'occupancy_percent': 0,
     }
 
 

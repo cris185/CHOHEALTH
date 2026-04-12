@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import Link from 'next/link';
@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { doctors as doctorsApi, services as servicesApi, Service, DayAvailability } from '@/lib/api';
 import PatientDayTimeline from '@/components/booking/PatientDayTimeline';
 import BookingModal from '@/components/booking/BookingModal';
+import { useBfcacheRefetch } from '@/hooks/useBfcacheRefetch';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -25,6 +26,7 @@ export default function DayBookingPage() {
   const [dayLoading, setDayLoading] = useState(true);
   const [selectedSlot, setSelectedSlot] = useState<string | null>(null);
   const [modalOpen, setModalOpen] = useState(false);
+  const slotsAbortRef = useRef<AbortController | null>(null);
 
   // Auth guard
   useEffect(() => {
@@ -43,16 +45,36 @@ export default function DayBookingPage() {
     }
   }, [serviceSid, doctorSid, router]);
 
-  // Load day slots
-  useEffect(() => {
-    if (doctorSid && serviceSid && date) {
-      setDayLoading(true);
-      doctorsApi.availableSlots(doctorSid, date, serviceSid)
-        .then(setDayData)
-        .catch(() => setDayData(null))
-        .finally(() => setDayLoading(false));
-    }
+  // Load day slots (con cancelación explícita para evitar que un fetch
+  // abortado por el unload a Stripe/PayPal deje la UI en loading eterno
+  // cuando la página es restaurada desde el bfcache).
+  const loadSlots = useCallback(() => {
+    if (!doctorSid || !serviceSid || !date) return;
+    slotsAbortRef.current?.abort();
+    const controller = new AbortController();
+    slotsAbortRef.current = controller;
+
+    setDayLoading(true);
+    doctorsApi.availableSlots(doctorSid, date, serviceSid, { signal: controller.signal })
+      .then((data) => { if (!controller.signal.aborted) setDayData(data); })
+      .catch((err: unknown) => {
+        const name = (err as { name?: string })?.name;
+        if (name === 'AbortError') return;
+        if (!controller.signal.aborted) setDayData(null);
+      })
+      .finally(() => { if (!controller.signal.aborted) setDayLoading(false); });
   }, [doctorSid, serviceSid, date]);
+
+  useEffect(() => {
+    loadSlots();
+    return () => slotsAbortRef.current?.abort();
+  }, [loadSlots]);
+
+  // Al volver del bfcache (botón "atrás" desde Stripe/PayPal), refresca los
+  // slots: el backend pudo haber cambiado mientras el usuario estaba fuera,
+  // y además así garantizamos que `dayLoading` quede en false aunque el
+  // navegador restaurara el estado a medio cargar.
+  useBfcacheRefetch(loadSlots);
 
   const handleSlotSelect = (time: string) => {
     setSelectedSlot(time);

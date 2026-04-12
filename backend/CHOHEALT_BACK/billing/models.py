@@ -1,5 +1,6 @@
 import shortuuid
 from django.db import models
+from django.db.models import Q
 from django.conf import settings
 from django.utils import timezone
 
@@ -19,9 +20,34 @@ INVOICE_STATUS = (
 
 
 class Invoice(models.Model):
+    """An invoice is polymorphic: it can bill either an Appointment or a
+    MedicineOrder (but NEVER both at the same time, enforced by a DB CHECK).
+
+    Historically `appointment` was a required OneToOneField. The Medicine Shop
+    feature added a second billable target — so `appointment` became nullable
+    and `medicine_order` was added alongside it. The constraint at the bottom
+    of this class enforces "exactly one target" at the database level so bad
+    data cannot be written even if application code has a bug.
+    """
     sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
     invoice_number = models.CharField(max_length=20, unique=True, editable=False)
-    appointment = models.OneToOneField('base.Appointment', on_delete=models.PROTECT, related_name='invoice')
+
+    # Polymorphic target (exactly one must be set)
+    appointment = models.OneToOneField(
+        'base.Appointment',
+        on_delete=models.PROTECT,
+        related_name='invoice',
+        null=True,
+        blank=True,
+    )
+    medicine_order = models.OneToOneField(
+        'base.MedicineOrder',
+        on_delete=models.PROTECT,
+        related_name='invoice',
+        null=True,
+        blank=True,
+    )
+
     patient = models.ForeignKey('patient.Patient', on_delete=models.PROTECT, related_name='invoices')
 
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
@@ -41,6 +67,17 @@ class Invoice(models.Model):
 
     class Meta:
         ordering = ['-created_at']
+        constraints = [
+            models.CheckConstraint(
+                # XOR: exactly one of the two targets must be set. In Django's
+                # Q DSL this is expressed as "(A and not B) or (not A and B)".
+                condition=(
+                    (Q(appointment__isnull=False) & Q(medicine_order__isnull=True))
+                    | (Q(appointment__isnull=True) & Q(medicine_order__isnull=False))
+                ),
+                name='invoice_exactly_one_target',
+            ),
+        ]
 
     def save(self, *args, **kwargs):
         if not self.invoice_number:

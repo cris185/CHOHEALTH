@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { appointments as appointmentsApi, DoctorAppointmentDetail } from '@/lib/api';
+import CancelAppointmentModal from './CancelAppointmentModal';
+import RescheduleModal from './RescheduleModal';
+import ConsultationCloseModal from './ConsultationCloseModal';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -36,16 +39,32 @@ interface AppointmentDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   appointmentSid: string | null;
+  onAppointmentChanged?: () => void;
 }
 
-export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid }: AppointmentDetailModalProps) {
+export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid, onAppointmentChanged }: AppointmentDetailModalProps) {
   const t = useTranslations();
+  const tActions = useTranslations('dashboard.doctor.appointmentsPage');
   const [detail, setDetail] = useState<DoctorAppointmentDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [rescheduleOpen, setRescheduleOpen] = useState(false);
+  const [completeOpen, setCompleteOpen] = useState(false);
+  const [actionError, setActionError] = useState('');
+  const [actionBusy, setActionBusy] = useState(false);
+
+  const refetchDetail = () => {
+    if (!appointmentSid) return;
+    const token = localStorage.getItem('access_token') || '';
+    appointmentsApi.doctorDetail(appointmentSid, token)
+      .then(setDetail)
+      .catch(() => {});
+  };
 
   useEffect(() => {
     if (isOpen && appointmentSid) {
       setLoading(true);
+      setActionError('');
       const token = localStorage.getItem('access_token') || '';
       appointmentsApi.doctorDetail(appointmentSid, token)
         .then(setDetail)
@@ -54,6 +73,56 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
     }
   }, [isOpen, appointmentSid]);
 
+  const handleDoctorCancel = async (sid: string, reason: string) => {
+    const token = localStorage.getItem('access_token') || '';
+    await appointmentsApi.doctorCancel(sid, reason, token);
+    onAppointmentChanged?.();
+    onClose();
+  };
+
+  const handleDoctorReschedule = async (sid: string, dateTimeIso: string) => {
+    const token = localStorage.getItem('access_token') || '';
+    await appointmentsApi.doctorReschedule(sid, dateTimeIso, token);
+    onAppointmentChanged?.();
+    // Refetch the detail so the modal shows the new date if the user keeps it open
+    refetchDetail();
+  };
+
+  const changeStatus = async (newStatus: 'In Progress' | 'No Show') => {
+    if (!detail) return;
+    setActionError('');
+    setActionBusy(true);
+    try {
+      const token = localStorage.getItem('access_token') || '';
+      await appointmentsApi.doctorStatus(detail.sid, newStatus, token);
+      onAppointmentChanged?.();
+      // Keep the modal open so the doctor sees the new state and can keep working.
+      refetchDetail();
+    } catch (err: unknown) {
+      const apiError = err as { data?: { detail?: string } };
+      setActionError(apiError?.data?.detail || tActions('statusChangeFailed'));
+    } finally {
+      setActionBusy(false);
+    }
+  };
+
+  const handleCompleted = () => {
+    onAppointmentChanged?.();
+    refetchDetail();
+    // Leave the modal open so the doctor can see the refreshed "Completed" state.
+  };
+
+  const now = new Date();
+  const scheduled = detail ? new Date(detail.date) : null;
+  const canModify = detail && detail.status === 'Confirmed' && scheduled! > now;
+  const canStart = detail && detail.status === 'Confirmed';
+  const canComplete = detail && detail.status === 'In Progress';
+  // Only allow "No Show" once the scheduled time has clearly passed (15-minute grace).
+  const canMarkNoShow =
+    detail &&
+    detail.status === 'Confirmed' &&
+    scheduled! < new Date(now.getTime() - 15 * 60 * 1000);
+
   if (!isOpen) return null;
 
   const patientImage = detail?.patient_image
@@ -61,8 +130,9 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
     : null;
 
   const statusColors: Record<string, string> = {
-    Pending: 'bg-blue-100 text-blue-700',
+    Unpaid: 'bg-amber-100 text-amber-700',
     Confirmed: 'bg-green-100 text-green-700',
+    'In Progress': 'bg-blue-100 text-blue-700',
     Completed: 'bg-gray-100 text-gray-600',
     Cancelled: 'bg-red-100 text-red-700',
     'No Show': 'bg-orange-100 text-orange-700',
@@ -182,13 +252,104 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
           <div className="p-8 text-center text-gray-400">Appointment not found</div>
         )}
 
-        <div className="border-t p-4">
+        <div className="border-t p-4 space-y-2">
+          {actionError && <p className="text-xs text-red-600">{actionError}</p>}
+
+          {/* Status-driven primary actions */}
+          {canStart && (
+            <button
+              onClick={() => changeStatus('In Progress')}
+              disabled={actionBusy}
+              className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {tActions('startConsultation')}
+            </button>
+          )}
+
+          {canComplete && (
+            <button
+              onClick={() => setCompleteOpen(true)}
+              disabled={actionBusy}
+              className="w-full rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {tActions('completeAndPrescribe')}
+            </button>
+          )}
+
+          {canMarkNoShow && (
+            <button
+              onClick={() => {
+                if (window.confirm(tActions('confirmNoShow'))) {
+                  changeStatus('No Show');
+                }
+              }}
+              disabled={actionBusy}
+              className="w-full rounded-md border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {tActions('markAsNoShow')}
+            </button>
+          )}
+
+          {canModify && (
+            <div className="flex gap-2">
+              <button
+                onClick={() => setRescheduleOpen(true)}
+                disabled={actionBusy}
+                className="flex-1 rounded-md border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Reschedule
+              </button>
+              <button
+                onClick={() => setCancelOpen(true)}
+                disabled={actionBusy}
+                className="flex-1 rounded-md border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Cancel Appointment
+              </button>
+            </div>
+          )}
           <button onClick={onClose}
             className="w-full rounded-md bg-gray-100 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-200">
             Close
           </button>
         </div>
       </div>
+
+      {detail && cancelOpen && (
+        <CancelAppointmentModal
+          isOpen={cancelOpen}
+          onClose={() => setCancelOpen(false)}
+          appointmentSid={detail.sid}
+          appointmentDate={detail.date}
+          invoiceStatus={detail.invoice_status}
+          onCancel={handleDoctorCancel}
+          actorRole="doctor"
+        />
+      )}
+
+      {detail && rescheduleOpen && (
+        <RescheduleModal
+          isOpen={rescheduleOpen}
+          onClose={() => setRescheduleOpen(false)}
+          appointmentSid={detail.sid}
+          doctorSid={detail.doctor_sid}
+          serviceSid={detail.service_sid}
+          currentDate={detail.date}
+          onReschedule={handleDoctorReschedule}
+          title="Reschedule appointment"
+        />
+      )}
+
+      {detail && completeOpen && (
+        <ConsultationCloseModal
+          isOpen={completeOpen}
+          onClose={() => setCompleteOpen(false)}
+          appointmentSid={detail.sid}
+          patientName={detail.patient_name}
+          appointmentDate={detail.date}
+          onCompleted={handleCompleted}
+        />
+      )}
     </div>
   );
 }

@@ -9,6 +9,8 @@ from .payment_views import (
     StripeSavedCardPayView,
     PayPalCreateOrderView, PayPalCaptureOrderView,
     CancelPendingPaymentView,
+    MedicineOrderStripeCheckoutView, MedicineOrderStripeVerifyView,
+    MedicineOrderPayPalCreateView, MedicineOrderPayPalCaptureView,
 )
 from .payment_methods_views import (
     SavedCardsListView, SaveCardSetupView,
@@ -30,6 +32,13 @@ urlpatterns = [
     path('payments/paypal/create-order/', PayPalCreateOrderView.as_view(), name='paypal-create-order'),
     path('payments/paypal/capture-order/', PayPalCaptureOrderView.as_view(), name='paypal-capture-order'),
     path('payments/cancel/', CancelPendingPaymentView.as_view(), name='cancel-pending-payment'),
+
+    # Medicine order payment flow (shares the same Stripe webhook as appointments,
+    # which branches on metadata.kind == 'medicine_order')
+    path('payments/medicine-order/stripe/checkout/', MedicineOrderStripeCheckoutView.as_view(), name='medicine-order-stripe-checkout'),
+    path('payments/medicine-order/stripe/verify/', MedicineOrderStripeVerifyView.as_view(), name='medicine-order-stripe-verify'),
+    path('payments/medicine-order/paypal/create-order/', MedicineOrderPayPalCreateView.as_view(), name='medicine-order-paypal-create'),
+    path('payments/medicine-order/paypal/capture-order/', MedicineOrderPayPalCaptureView.as_view(), name='medicine-order-paypal-capture'),
 
     # Saved payment methods
     path('payment-methods/cards/', SavedCardsListView.as_view(), name='saved-cards-list'),

@@ -120,11 +120,11 @@ class DoctorStatsView(APIView):
 
         total_appointments = Appointment.objects.filter(doctor=doctor).count()
         today_appointments = Appointment.objects.filter(
-            doctor=doctor, date__date=today, status__in=['Scheduled', 'Confirmed']
+            doctor=doctor, date__date=today, status='Confirmed'
         ).count()
         completed_appointments = Appointment.objects.filter(doctor=doctor, status='Completed').count()
         pending_appointments = Appointment.objects.filter(
-            doctor=doctor, status__in=['Scheduled', 'Confirmed']
+            doctor=doctor, status='Confirmed'
         ).count()
         total_patients = Appointment.objects.filter(doctor=doctor).values('patient').distinct().count()
 

@@ -256,7 +256,15 @@ export default function DoctorDashboard() {
         </motion.div>
       </div>
 
-      <AppointmentDetailModal isOpen={!!modalSid} onClose={() => setModalSid(null)} appointmentSid={modalSid} />
+      <AppointmentDetailModal
+        isOpen={!!modalSid}
+        onClose={() => setModalSid(null)}
+        appointmentSid={modalSid}
+        onAppointmentChanged={() => {
+          const token = localStorage.getItem('access_token') || '';
+          appointmentsApi.doctorList(token, selectedDate).then(setAppts).catch(() => {});
+        }}
+      />
     </div>
   );
 }

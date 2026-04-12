@@ -14,7 +14,10 @@ from doctor.models import Doctor
 class MedicationSerializer(serializers.ModelSerializer):
     class Meta:
         model = Medication
-        fields = ('sid', 'name', 'generic_name', 'category', 'dosage_form', 'strength')
+        fields = (
+            'sid', 'name', 'generic_name', 'category', 'dosage_form', 'strength',
+            'cost', 'requires_prescription', 'free_when_prescribed',
+        )
 
 
 class LabTestSerializer(serializers.ModelSerializer):
@@ -88,10 +91,9 @@ class LabOrderCreateSerializer(serializers.Serializer):
 
 
 class AppointmentStatusUpdateSerializer(serializers.Serializer):
-    status = serializers.ChoiceField(choices=['Confirmed', 'In Progress', 'Completed', 'Cancelled', 'No Show'])
+    status = serializers.ChoiceField(choices=['In Progress', 'Completed', 'Cancelled', 'No Show'])
 
     VALID_TRANSITIONS = {
-        'Scheduled': ['Confirmed', 'Cancelled'],
         'Confirmed': ['In Progress', 'Completed', 'Cancelled', 'No Show'],
         'In Progress': ['Completed', 'Cancelled'],
     }
@@ -105,20 +107,62 @@ class AppointmentStatusUpdateSerializer(serializers.Serializer):
         return data
 
 
+class _OptionalPrescriptionCreateSerializer(serializers.Serializer):
+    """Nested payload for creating a prescription as part of completing an appointment.
+
+    Unlike `PrescriptionCreateSerializer`, items is optional here because a doctor
+    may include the prescription block with additional_notes only — but if the
+    block exists AND items are supplied, each item is validated through the
+    shared `PrescriptionItemCreateSerializer`.
+    """
+    additional_notes = serializers.CharField(required=False, default='', allow_blank=True)
+    items = PrescriptionItemCreateSerializer(many=True, required=False, default=list)
+
+
+class _OptionalLabOrderCreateSerializer(serializers.Serializer):
+    """Nested payload for creating a lab order as part of completing an appointment."""
+    notes = serializers.CharField(required=False, default='', allow_blank=True)
+    items = LabOrderItemCreateSerializer(many=True, required=False, default=list)
+
+
+class AppointmentCompleteSerializer(serializers.Serializer):
+    """Atomic payload for the `/appointments/doctor/<sid>/complete/` endpoint.
+
+    Semantics:
+      - `diagnosis` is required: the doctor must provide one to complete the visit.
+      - `prescription` and `lab_order` are OPTIONAL. If omitted the appointment is
+        simply closed with a medical record (no meds, no labs).
+      - If `prescription.items` is empty, no Prescription row is created at all
+        (avoids an empty prescription tied to the medical record).
+      - Same for `lab_order.items`.
+    """
+    diagnosis = serializers.CharField()
+    treatment_plan = serializers.CharField(required=False, default='', allow_blank=True)
+    notes = serializers.CharField(required=False, default='', allow_blank=True)
+    prescription = _OptionalPrescriptionCreateSerializer(required=False)
+    lab_order = _OptionalLabOrderCreateSerializer(required=False)
+
+
 # ============================================================================
 # Patient Read Serializers
 # ============================================================================
 
 class PrescriptionItemDetailSerializer(serializers.ModelSerializer):
     medication_info = serializers.SerializerMethodField()
+    medication_sid = serializers.SerializerMethodField()
+    is_claimed = serializers.SerializerMethodField()
 
     class Meta:
         model = PrescriptionItem
         fields = (
-            'sid', 'medication_name', 'is_system_medication', 'medication_info',
+            'sid', 'medication_sid', 'medication_name', 'is_system_medication', 'medication_info',
             'dosage', 'frequency', 'duration_days', 'instructions',
             'delivery_method', 'delivery_branch', 'delivery_address', 'delivery_status',
+            'is_claimed',
         )
+
+    def get_medication_sid(self, obj):
+        return obj.medication.sid if obj.medication else None
 
     def get_medication_info(self, obj):
         if obj.medication:
@@ -128,8 +172,17 @@ class PrescriptionItemDetailSerializer(serializers.ModelSerializer):
                 'category': obj.medication.category,
                 'dosage_form': obj.medication.dosage_form,
                 'strength': obj.medication.strength,
+                'cost': str(obj.medication.cost),
+                'free_when_prescribed': obj.medication.free_when_prescribed,
             }
         return None
+
+    def get_is_claimed(self, obj):
+        """True when this prescription item has already been consumed by a
+        MedicineOrderItem (the patient either requested a free claim or a
+        paid purchase that used this prescription as proof).
+        """
+        return hasattr(obj, 'medicine_order_item') and obj.medicine_order_item is not None
 
 
 class PrescriptionDetailSerializer(serializers.ModelSerializer):
@@ -229,7 +282,10 @@ class MedicationCatalogSerializer(serializers.ModelSerializer):
     """Public catalog for patients to browse and purchase."""
     class Meta:
         model = Medication
-        fields = ('sid', 'name', 'generic_name', 'description', 'category', 'dosage_form', 'strength', 'cost', 'requires_prescription')
+        fields = (
+            'sid', 'name', 'generic_name', 'description', 'category', 'dosage_form',
+            'strength', 'cost', 'requires_prescription', 'free_when_prescribed',
+        )
 
 
 class MedicineOrderItemCreateSerializer(serializers.Serializer):
@@ -237,11 +293,11 @@ class MedicineOrderItemCreateSerializer(serializers.Serializer):
     quantity = serializers.IntegerField(min_value=1, default=1)
 
     def validate_medication_sid(self, value):
-        try:
-            med = Medication.objects.get(sid=value, is_active=True)
-            if med.requires_prescription:
-                raise serializers.ValidationError('This medication requires a prescription.')
-        except Medication.DoesNotExist:
+        # Existence-only check. The rule "prescription-required meds need an
+        # active prescription" is enforced in `MedicineOrderCreateView.post`
+        # so we can resolve the active PrescriptionItem and price the order
+        # atomically in a single place.
+        if not Medication.objects.filter(sid=value, is_active=True).exists():
             raise serializers.ValidationError('Medication not found.')
         return value
 
@@ -277,7 +333,10 @@ class MedicineOrderListSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MedicineOrder
-        fields = ('sid', 'status', 'delivery_method', 'total', 'items_count', 'created_at')
+        fields = (
+            'sid', 'status', 'delivery_method', 'total', 'items_count',
+            'pickup_code', 'created_at',
+        )
 
     def get_items_count(self, obj):
         return obj.items.count()
@@ -289,7 +348,10 @@ class MedicineOrderDetailSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = MedicineOrder
-        fields = ('sid', 'status', 'delivery_method', 'branch_name', 'delivery_address', 'subtotal', 'total', 'notes', 'items', 'created_at')
+        fields = (
+            'sid', 'status', 'delivery_method', 'branch_name', 'delivery_address',
+            'subtotal', 'total', 'notes', 'items', 'pickup_code', 'created_at',
+        )
 
     def get_branch_name(self, obj):
         return obj.delivery_branch.name if obj.delivery_branch else None

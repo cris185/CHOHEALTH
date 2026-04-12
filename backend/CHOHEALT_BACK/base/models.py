@@ -54,7 +54,7 @@ class Service(models.Model):
 # ============================================================================
 
 APPOINTMENT_STATUS = (
-    ('Scheduled', 'Scheduled'),
+    ('Unpaid', 'Unpaid'),
     ('Confirmed', 'Confirmed'),
     ('In Progress', 'In Progress'),
     ('Completed', 'Completed'),
@@ -67,6 +67,13 @@ APPOINTMENT_MODE = (
     ('Virtual', 'Virtual'),
 )
 
+CANCELLED_BY_CHOICES = (
+    ('patient', 'Patient'),
+    ('doctor', 'Doctor'),
+    ('admin', 'Admin'),
+    ('system', 'System'),
+)
+
 
 class Appointment(models.Model):
     sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
@@ -74,7 +81,7 @@ class Appointment(models.Model):
     doctor = models.ForeignKey(Doctor, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
     service = models.ForeignKey(Service, on_delete=models.SET_NULL, null=True, blank=True, related_name='appointments')
     date = models.DateTimeField()
-    status = models.CharField(max_length=20, choices=APPOINTMENT_STATUS, default='Scheduled')
+    status = models.CharField(max_length=20, choices=APPOINTMENT_STATUS, default='Unpaid')
     mode = models.CharField(max_length=20, choices=APPOINTMENT_MODE, default='In-Person')
 
     # In-Person fields
@@ -92,6 +99,15 @@ class Appointment(models.Model):
     symptoms = models.TextField(blank=True)
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
+
+    # Cancellation tracking
+    cancelled_at = models.DateTimeField(null=True, blank=True)
+    cancelled_by = models.CharField(max_length=20, choices=CANCELLED_BY_CHOICES, blank=True)
+    cancel_reason = models.TextField(blank=True)
+
+    # Reschedule tracking
+    rescheduled_from = models.DateTimeField(null=True, blank=True)
+    reschedule_count = models.PositiveIntegerField(default=0)
 
     class Meta:
         ordering = ['-date']
@@ -173,6 +189,14 @@ class Medication(models.Model):
     is_active = models.BooleanField(default=True)
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     requires_prescription = models.BooleanField(default=True)
+    free_when_prescribed = models.BooleanField(
+        default=True,
+        help_text=(
+            'When True, a patient receives this medication free of charge if it comes '
+            'from a prescription issued by a doctor of the hospital. Patients purchasing '
+            'the medication directly (without a prescription) still pay the full cost.'
+        ),
+    )
 
     class Meta:
         ordering = ['name']
@@ -387,6 +411,12 @@ class MedicineOrder(models.Model):
     notes = models.TextField(blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
+    # Short human-friendly code that the patient shows at the branch to claim
+    # the order. Same code is encoded in the QR sent by email. Generated once,
+    # when the order transitions to `Paid` (either paid online or fully covered
+    # by a prescription). Null while the order is still Pending Payment.
+    pickup_code = models.CharField(max_length=20, unique=True, null=True, blank=True, db_index=True)
+
     class Meta:
         ordering = ['-created_at']
 
@@ -402,12 +432,28 @@ class MedicineOrderItem(models.Model):
     unit_price = models.DecimalField(max_digits=10, decimal_places=2)
     total = models.DecimalField(max_digits=10, decimal_places=2)
 
+    # When a patient buys a prescribed medication through the medicine shop,
+    # we link the order item to the specific PrescriptionItem being consumed.
+    # A single PrescriptionItem can only be claimed ONCE across all non-cancelled
+    # medicine orders (enforced via unique constraint below and a lookup in the
+    # create view). This prevents double-dispensing when the patient also has
+    # the old pickup/delivery flow available on the prescription item itself.
+    source_prescription_item = models.OneToOneField(
+        PrescriptionItem,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='medicine_order_item',
+        help_text=(
+            'If this order item fulfils a doctor prescription, links to the '
+            'specific PrescriptionItem being claimed. Used to enforce that a '
+            'prescribed medication is retrieved at most once.'
+        ),
+    )
+
     def save(self, *args, **kwargs):
         self.total = self.quantity * self.unit_price
         super().save(*args, **kwargs)
 
     def __str__(self):
         return f'{self.medication.name} x{self.quantity}'
-
-    def __str__(self):
-        return f'{self.patient.full_name} - Dr. {self.doctor.first_name} {self.doctor.first_last_name} ({self.rating}/5)'

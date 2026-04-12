@@ -31,7 +31,7 @@ class PatientStatsView(APIView):
 
         total_appointments = Appointment.objects.filter(patient=patient).count()
         upcoming_appointments = Appointment.objects.filter(
-            patient=patient, status__in=['Scheduled', 'Confirmed']
+            patient=patient, status='Confirmed'
         ).count()
         completed_appointments = Appointment.objects.filter(patient=patient, status='Completed').count()
         total_medical_records = MedicalRecord.objects.filter(patient=patient).count()

@@ -204,6 +204,8 @@ export interface TimeSlot {
   available: boolean;
   is_break: boolean;
   is_booked: boolean;
+  /** `null` when available. One of `'past' | 'break' | 'shift_end' | 'booked'` when not. */
+  unavailable_reason: 'past' | 'break' | 'shift_end' | 'booked' | null;
 }
 
 export interface ScheduleBlock {
@@ -260,12 +262,34 @@ export interface AppointmentItem {
   status: string;
   mode: string;
   doctor_name: string;
+  doctor_sid: string | null;
   service_name: string | null;
+  service_sid: string | null;
+  service_cost: string;
+  service_duration: number;
   branch_name: string | null;
   issues: string;
   symptoms: string;
   notes: string;
+  invoice_status: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string;
+  cancel_reason: string;
+  rescheduled_from: string | null;
+  reschedule_count: number;
   created_at: string;
+}
+
+export interface CancelAppointmentResponse {
+  detail: string;
+  refund_amount: string;
+  refund_status?: string;
+}
+
+export interface RescheduleAppointmentResponse {
+  detail: string;
+  new_date: string;
+  reschedule_count: number;
 }
 
 export const doctors = {
@@ -275,8 +299,15 @@ export const doctors = {
   availableDays: (sid: string, month: string, serviceSid: string): Promise<DayInfo[]> =>
     fetchAPI(`/doctors/${sid}/available-days/?month=${month}&service_sid=${serviceSid}`),
 
-  availableSlots: (sid: string, date: string, serviceSid: string): Promise<DayAvailability> =>
-    fetchAPI(`/doctors/${sid}/available-slots/?date=${date}&service_sid=${serviceSid}`),
+  availableSlots: (
+    sid: string,
+    date: string,
+    serviceSid: string,
+    init?: { signal?: AbortSignal },
+  ): Promise<DayAvailability> =>
+    fetchAPI(`/doctors/${sid}/available-slots/?date=${date}&service_sid=${serviceSid}`, {
+      signal: init?.signal,
+    }),
 };
 
 export interface DoctorAppointmentItem {
@@ -302,14 +333,31 @@ export interface DoctorAppointmentDetail extends DoctorAppointmentItem {
   patient_gender: string;
   patient_blood_group: string;
   room: string;
+  doctor_sid: string | null;
+  service_sid: string | null;
+  invoice_status: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string;
+  cancel_reason: string;
+  rescheduled_from: string | null;
+  reschedule_count: number;
 }
 
 export const appointments = {
   create: (data: AppointmentCreateData, token: string): Promise<AppointmentItem> =>
     fetchAPI('/appointments/', { method: 'POST', body: JSON.stringify(data), token }),
 
-  list: (token: string): Promise<AppointmentItem[]> =>
-    fetchAPI('/appointments/my/', { token }),
+  list: (token: string, init?: { signal?: AbortSignal }): Promise<AppointmentItem[]> =>
+    fetchAPI('/appointments/my/', { token, signal: init?.signal }),
+
+  cancel: (sid: string, reason: string, token: string): Promise<CancelAppointmentResponse> =>
+    fetchAPI(`/appointments/${sid}/cancel/`, { method: 'POST', body: JSON.stringify({ reason }), token }),
+
+  reschedule: (sid: string, date: string, token: string): Promise<RescheduleAppointmentResponse> =>
+    fetchAPI(`/appointments/${sid}/reschedule/`, { method: 'POST', body: JSON.stringify({ date }), token }),
+
+  delete: (sid: string, token: string) =>
+    fetchAPI(`/appointments/${sid}/delete/`, { method: 'DELETE', token }),
 
   doctorList: (token: string, date?: string): Promise<DoctorAppointmentItem[]> =>
     fetchAPI(`/appointments/doctor/${date ? `?date=${date}` : ''}`, { token }),
@@ -319,11 +367,324 @@ export const appointments = {
 
   doctorDetail: (sid: string, token: string): Promise<DoctorAppointmentDetail> =>
     fetchAPI(`/appointments/doctor/${sid}/`, { token }),
+
+  doctorCancel: (sid: string, reason: string, token: string): Promise<CancelAppointmentResponse> =>
+    fetchAPI(`/appointments/doctor/${sid}/cancel/`, { method: 'POST', body: JSON.stringify({ reason }), token }),
+
+  doctorReschedule: (sid: string, date: string, token: string): Promise<RescheduleAppointmentResponse> =>
+    fetchAPI(`/appointments/doctor/${sid}/reschedule/`, { method: 'POST', body: JSON.stringify({ date }), token }),
+
+  doctorStatus: (
+    sid: string,
+    newStatus: 'In Progress' | 'Completed' | 'Cancelled' | 'No Show',
+    token: string,
+  ): Promise<{ detail: string; status: string }> =>
+    fetchAPI(`/appointments/doctor/${sid}/status/`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: newStatus }),
+      token,
+    }),
+
+  doctorComplete: (
+    sid: string,
+    payload: AppointmentCompletePayload,
+    token: string,
+  ): Promise<AppointmentCompleteResponse> =>
+    fetchAPI(`/appointments/doctor/${sid}/complete/`, {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      token,
+    }),
+};
+
+// ---- Medical workflow types ----
+
+export interface MedicationCatalogItem {
+  sid: string;
+  name: string;
+  generic_name: string;
+  category: string;
+  dosage_form: string;
+  strength: string;
+  cost: string;
+  requires_prescription: boolean;
+  free_when_prescribed: boolean;
+}
+
+export interface LabTestItem {
+  sid: string;
+  name: string;
+  category: string;
+  description: string;
+  cost: string;
+}
+
+export interface PrescriptionItemPayload {
+  /** Optional catalog pick. If set, the backend links the FK. */
+  medication_sid?: string;
+  /** Free-text name. Required if `medication_sid` is empty. */
+  medication_name?: string;
+  dosage: string;
+  frequency: string;
+  duration_days: number;
+  instructions?: string;
+}
+
+export interface LabOrderItemPayload {
+  test_sid: string;
+  notes?: string;
+}
+
+export interface AppointmentCompletePayload {
+  diagnosis: string;
+  treatment_plan?: string;
+  notes?: string;
+  prescription?: {
+    additional_notes?: string;
+    items: PrescriptionItemPayload[];
+  };
+  lab_order?: {
+    notes?: string;
+    items: LabOrderItemPayload[];
+  };
+}
+
+export interface AppointmentCompleteResponse {
+  detail: string;
+  appointment_sid: string;
+  medical_record_sid: string;
+  prescription_sid: string | null;
+  lab_order_sid: string | null;
+}
+
+export const medications = {
+  list: (token: string, search?: string): Promise<MedicationCatalogItem[]> =>
+    fetchAPI(`/medications/${search ? `?search=${encodeURIComponent(search)}` : ''}`, { token }),
+};
+
+export const labTests = {
+  list: (token: string, search?: string): Promise<LabTestItem[]> =>
+    fetchAPI(`/lab-tests/${search ? `?search=${encodeURIComponent(search)}` : ''}`, { token }),
 };
 
 export const branches = {
   list: (): Promise<BranchItem[]> =>
     fetchAPI('/branches/'),
+};
+
+// ============================================================================
+// Patient-side medical workflow: records, prescriptions, labs, medicine shop
+// ============================================================================
+
+export interface PatientPrescriptionItem {
+  sid: string;
+  medication_sid: string | null;
+  medication_name: string;
+  is_system_medication: boolean;
+  medication_info: {
+    name: string;
+    generic_name: string;
+    category: string;
+    dosage_form: string;
+    strength: string;
+    cost: string;
+    free_when_prescribed: boolean;
+  } | null;
+  dosage: string;
+  frequency: string;
+  duration_days: number;
+  instructions: string;
+  delivery_method: string;
+  delivery_branch: number | null;
+  delivery_address: string;
+  delivery_status: string;
+  is_claimed: boolean;
+}
+
+export interface PatientPrescription {
+  sid: string;
+  additional_notes: string;
+  items: PatientPrescriptionItem[];
+  created_at: string;
+}
+
+export interface PatientLabOrderItem {
+  sid: string;
+  test_name: string;
+  test_category: string;
+  notes: string;
+  has_result: boolean;
+}
+
+export interface PatientLabOrder {
+  sid: string;
+  status: string;
+  is_prescribed: boolean;
+  notes: string;
+  items: PatientLabOrderItem[];
+  ordered_at: string;
+}
+
+export interface PatientMedicalRecordListItem {
+  sid: string;
+  diagnosis: string;
+  doctor_name: string | null;
+  has_prescription: boolean;
+  has_lab_orders: boolean;
+  created_at: string;
+}
+
+export interface PatientMedicalRecordDetail {
+  sid: string;
+  diagnosis: string;
+  treatment_plan: string;
+  notes: string;
+  doctor_name: string | null;
+  prescription: PatientPrescription | null;
+  lab_orders: PatientLabOrder[];
+  created_at: string;
+}
+
+export const patientMedicalRecords = {
+  list: (token: string): Promise<PatientMedicalRecordListItem[]> =>
+    fetchAPI('/patient/medical-records/', { token }).then(
+      (data: { results?: PatientMedicalRecordListItem[] } | PatientMedicalRecordListItem[]) =>
+        Array.isArray(data) ? data : (data.results ?? []),
+    ),
+  detail: (sid: string, token: string): Promise<PatientMedicalRecordDetail> =>
+    fetchAPI(`/patient/medical-records/${sid}/`, { token }),
+};
+
+export const patientLabOrders = {
+  list: (token: string): Promise<PatientLabOrder[]> =>
+    fetchAPI('/patient/lab-orders/', { token }).then(
+      (data: { results?: PatientLabOrder[] } | PatientLabOrder[]) =>
+        Array.isArray(data) ? data : (data.results ?? []),
+    ),
+};
+
+// ---- Medicine shop (patient purchases) ----
+
+export interface MedicineCatalogItem {
+  sid: string;
+  name: string;
+  generic_name: string;
+  description: string;
+  category: string;
+  dosage_form: string;
+  strength: string;
+  cost: string;
+  requires_prescription: boolean;
+  free_when_prescribed: boolean;
+}
+
+export interface MedicineOrderCreateItem {
+  medication_sid: string;
+  quantity: number;
+}
+
+export interface MedicineOrderCreatePayload {
+  items: MedicineOrderCreateItem[];
+  delivery_method: 'pickup' | 'delivery';
+  branch_sid?: string;
+  delivery_address?: string;
+  notes?: string;
+}
+
+export interface MedicineOrderCreateResponse {
+  order_sid: string;
+  total: string;
+  status: string;
+  pickup_code: string | null;
+  detail: string;
+}
+
+export interface MedicineOrderListItem {
+  sid: string;
+  status: string;
+  delivery_method: string;
+  total: string;
+  items_count: number;
+  pickup_code: string | null;
+  created_at: string;
+}
+
+export const medicineCatalog = {
+  /**
+   * By default the backend only returns OTC meds (`requires_prescription=false`).
+   * Pass `includePrescription=true` to also receive medications that require
+   * a prescription — the UI uses this to render them with a "Rx required" badge
+   * so patients know the hospital carries them.
+   */
+  list: (opts?: { search?: string; includePrescription?: boolean }): Promise<MedicineCatalogItem[]> => {
+    const params = new URLSearchParams();
+    if (opts?.search) params.set('search', opts.search);
+    if (opts?.includePrescription) params.set('include_prescription', 'true');
+    const qs = params.toString();
+    return fetchAPI(`/medicine-catalog/${qs ? `?${qs}` : ''}`);
+  },
+};
+
+export interface MedicineOrderDetailItem {
+  sid: string;
+  medication_name: string;
+  medication_strength: string;
+  quantity: number;
+  unit_price: string;
+  total: string;
+}
+
+export interface MedicineOrderDetail {
+  sid: string;
+  status: string;
+  delivery_method: string;
+  branch_name: string | null;
+  delivery_address: string;
+  subtotal: string;
+  total: string;
+  notes: string;
+  items: MedicineOrderDetailItem[];
+  pickup_code: string | null;
+  created_at: string;
+}
+
+export const medicineOrders = {
+  create: (payload: MedicineOrderCreatePayload, token: string): Promise<MedicineOrderCreateResponse> =>
+    fetchAPI('/medicine-orders/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      token,
+    }),
+
+  list: (token: string): Promise<MedicineOrderListItem[]> =>
+    fetchAPI('/medicine-orders/my/', { token }).then(
+      (data: { results?: MedicineOrderListItem[] } | MedicineOrderListItem[]) =>
+        Array.isArray(data) ? data : (data.results ?? []),
+    ),
+
+  detail: (sid: string, token: string): Promise<MedicineOrderDetail> =>
+    fetchAPI(`/medicine-orders/${sid}/`, { token }),
+};
+
+// ---- Prescribed lab booking (free appointment) ----
+
+export interface BookPrescribedLabResponse {
+  appointment_sid: string;
+  detail: string;
+}
+
+export const bookPrescribedLab = {
+  create: (
+    labOrderSid: string,
+    dateIso: string,
+    branchSid: string,
+    token: string,
+  ): Promise<BookPrescribedLabResponse> =>
+    fetchAPI('/appointments/book-prescribed-lab/', {
+      method: 'POST',
+      body: JSON.stringify({ lab_order_sid: labOrderSid, date: dateIso, branch_sid: branchSid }),
+      token,
+    }),
 };
 
 export interface DoctorProfile {
@@ -544,8 +905,6 @@ export const patientPayments = {
 
 export interface CreateAppointmentResponse {
   appointment_sid: string;
-  invoice_sid: string;
-  invoice_number: string;
   amount: string;
   service_name: string;
 }
@@ -582,6 +941,53 @@ export const paymentFlow = {
   cancelPending: (appointmentSid: string, token: string) =>
     fetchAPI('/payments/cancel/', { method: 'POST', body: JSON.stringify({ appointment_sid: appointmentSid }), token }),
 };
+
+/**
+ * Payment flow for a `MedicineOrder`. Mirrors `paymentFlow` (appointments) but
+ * hits the medicine-order-specific endpoints. The Stripe webhook is shared —
+ * the backend branches on metadata.kind.
+ */
+export const medicineOrderPaymentFlow = {
+  stripeCheckout: (orderSid: string, token: string): Promise<StripeCheckoutResponse> =>
+    fetchAPI('/payments/medicine-order/stripe/checkout/', {
+      method: 'POST',
+      body: JSON.stringify({ order_sid: orderSid }),
+      token,
+    }),
+
+  stripeVerify: (orderSid: string, sessionId: string, token: string) =>
+    fetchAPI('/payments/medicine-order/stripe/verify/', {
+      method: 'POST',
+      body: JSON.stringify({ order_sid: orderSid, session_id: sessionId }),
+      token,
+    }),
+
+  paypalCreateOrder: (orderSid: string, token: string): Promise<PayPalOrderResponse> =>
+    fetchAPI('/payments/medicine-order/paypal/create-order/', {
+      method: 'POST',
+      body: JSON.stringify({ order_sid: orderSid }),
+      token,
+    }),
+
+  paypalCaptureOrder: (
+    data: { payment_id: string; payer_id: string; order_sid: string },
+    token: string,
+  ) =>
+    fetchAPI('/payments/medicine-order/paypal/capture-order/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+      token,
+    }),
+};
+
+/**
+ * Discriminated union describing what the `PaymentModal` should charge for.
+ * Used to generalise the modal so it can handle both appointment payments
+ * (the historic flow) and medicine order payments (added in Paso 4).
+ */
+export type PaymentTarget =
+  | { kind: 'appointment'; appointmentSid: string }
+  | { kind: 'medicine_order'; orderSid: string };
 
 export interface SavedCard {
   id: string;

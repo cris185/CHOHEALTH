@@ -313,7 +313,20 @@ export default function DoctorAppointmentsPage() {
         </div>
       </div>
 
-      <AppointmentDetailModal isOpen={!!modalSid} onClose={() => setModalSid(null)} appointmentSid={modalSid} />
+      <AppointmentDetailModal
+        isOpen={!!modalSid}
+        onClose={() => setModalSid(null)}
+        appointmentSid={modalSid}
+        onAppointmentChanged={() => {
+          // Refetch both month and day lists after cancel/reschedule
+          const token = localStorage.getItem('access_token') || '';
+          const monthStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
+          appointmentsApi.doctorListByMonth(token, monthStr).then(setMonthAppts).catch(() => {});
+          if (selectedDate) {
+            appointmentsApi.doctorList(token, selectedDate).then(setDayAppts).catch(() => {});
+          }
+        }}
+      />
     </div>
   );
 }

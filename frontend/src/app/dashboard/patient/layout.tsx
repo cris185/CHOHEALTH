@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
+import { CartProvider } from '@/context/CartContext';
 import PatientSidebar from '@/components/patient/PatientSidebar';
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
@@ -67,7 +68,9 @@ export default function PatientDashboardLayout({ children }: { children: React.R
         </Sheet>
       </div>
 
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="flex-1 overflow-y-auto">
+        <CartProvider>{children}</CartProvider>
+      </main>
     </div>
   );
 }

@@ -221,3 +221,268 @@ def send_appointment_confirmation_email(appointment, invoice):
             html_content=html,
             attachments=[a for a in [_logo_attachment()] if a],
         )
+
+
+def send_appointment_cancellation_email(appointment, cancelled_by: str, refund_amount=None):
+    """
+    Send cancellation email to the patient.
+    `cancelled_by` is one of 'patient' | 'doctor' | 'admin' | 'system'.
+    `refund_amount` is a Decimal or None; if None, no refund line is shown.
+    """
+    patient = appointment.patient
+    doctor = appointment.doctor
+    service = appointment.service
+
+    appt_date = appointment.date.strftime('%A, %B %d, %Y')
+    appt_time = appointment.date.strftime('%I:%M %p')
+    doctor_name = f'Dr. {doctor.first_name} {doctor.first_last_name}' if doctor else 'Lab Service'
+
+    if cancelled_by == 'doctor':
+        headline = 'Your appointment has been cancelled by the doctor'
+        lead = f'Hi <strong>{patient.full_name}</strong>, we\'re sorry to inform you that {doctor_name} had to cancel your upcoming appointment. A full refund has been issued.'
+    elif cancelled_by == 'patient':
+        headline = 'Your appointment has been cancelled'
+        lead = f'Hi <strong>{patient.full_name}</strong>, your appointment has been cancelled as requested.'
+    else:
+        headline = 'Your appointment has been cancelled'
+        lead = f'Hi <strong>{patient.full_name}</strong>, your appointment has been cancelled.'
+
+    refund_block = ''
+    if refund_amount is not None:
+        refund_amount_str = f'${refund_amount:.2f}'
+        refund_note = 'Refunds typically take 5-10 business days to appear on your statement.' if refund_amount > 0 else 'No refund was issued per the cancellation policy (less than 24 hours notice).'
+        refund_block = f'''
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Refund Amount</td>
+                    <td style="color: {'#166534' if refund_amount > 0 else '#991b1b'}; padding: 6px 0; font-size: 18px; text-align: right; font-weight: 700;">{refund_amount_str}</td>
+                </tr>
+            </table>
+            <p style="color: #94a3b8; font-size: 12px; margin-top: 12px; line-height: 1.5;">{refund_note}</p>
+        </div>
+        '''
+
+    html = f'''
+    <div style="font-family: Inter, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+            <img src="cid:logo" alt="CHO Health" style="height: 120px; width: auto; margin-bottom: 8px;" />
+        </div>
+
+        <div style="background: #fef2f2; border: 1px solid #fecaca; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #991b1b; font-size: 14px; font-weight: 600; margin: 0;">
+                {headline}
+            </p>
+        </div>
+
+        <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
+            {lead}
+        </p>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Doctor</td>
+                    <td style="color: #1e293b; padding: 6px 0; font-size: 14px; text-align: right; font-weight: 500;">{doctor_name}</td>
+                </tr>
+                <tr>
+                    <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Service</td>
+                    <td style="color: #1e293b; padding: 6px 0; font-size: 14px; text-align: right; font-weight: 500;">{service.name if service else "N/A"}</td>
+                </tr>
+                <tr>
+                    <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Date</td>
+                    <td style="color: #1e293b; padding: 6px 0; font-size: 14px; text-align: right; font-weight: 500;">{appt_date}</td>
+                </tr>
+                <tr>
+                    <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Time</td>
+                    <td style="color: #1e293b; padding: 6px 0; font-size: 14px; text-align: right; font-weight: 500;">{appt_time}</td>
+                </tr>
+            </table>
+        </div>
+
+        {refund_block}
+
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; line-height: 1.5;">
+            You can book a new appointment anytime from your dashboard.
+        </p>
+
+        <p style="color: #cbd5e1; font-size: 11px; text-align: center; margin-top: 24px;">
+            &copy; {__import__("datetime").datetime.now().year} CHO Health. All rights reserved.
+        </p>
+    </div>
+    '''
+
+    send_email(
+        to_email=patient.user.email,
+        subject='CHO Health - Appointment Cancelled',
+        html_content=html,
+        attachments=[a for a in [_logo_attachment()] if a],
+    )
+
+
+def send_appointment_rescheduled_email(appointment, old_date, rescheduled_by: str):
+    """
+    Send rescheduled notification to the patient.
+    `old_date` is the previous datetime (already timezone-aware).
+    `rescheduled_by` is 'patient' | 'doctor' | 'admin'.
+    """
+    patient = appointment.patient
+    doctor = appointment.doctor
+    service = appointment.service
+
+    old_date_str = old_date.strftime('%A, %B %d, %Y at %I:%M %p')
+    new_date_str = appointment.date.strftime('%A, %B %d, %Y at %I:%M %p')
+    doctor_name = f'Dr. {doctor.first_name} {doctor.first_last_name}' if doctor else 'Lab Service'
+
+    if rescheduled_by == 'doctor':
+        headline = 'Your appointment time has been changed by the doctor'
+        lead = f'Hi <strong>{patient.full_name}</strong>, {doctor_name} has rescheduled your appointment to a new time. Please review the new details below.'
+    else:
+        headline = 'Your appointment has been rescheduled'
+        lead = f'Hi <strong>{patient.full_name}</strong>, your appointment with {doctor_name} has been successfully rescheduled.'
+
+    html = f'''
+    <div style="font-family: Inter, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+            <img src="cid:logo" alt="CHO Health" style="height: 120px; width: auto; margin-bottom: 8px;" />
+        </div>
+
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #1d4ed8; font-size: 14px; font-weight: 600; margin: 0;">
+                {headline}
+            </p>
+        </div>
+
+        <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
+            {lead}
+        </p>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 16px;">
+            <p style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px;">Previous Time</p>
+            <p style="color: #94a3b8; font-size: 14px; text-decoration: line-through; margin: 0;">{old_date_str}</p>
+        </div>
+
+        <div style="background: #f0f9ff; border: 1px solid #bae6fd; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <p style="color: #0369a1; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px; font-weight: 600;">New Time</p>
+            <p style="color: #0c4a6e; font-size: 16px; font-weight: 600; margin: 0;">{new_date_str}</p>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <tr>
+                    <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Doctor</td>
+                    <td style="color: #1e293b; padding: 6px 0; font-size: 14px; text-align: right; font-weight: 500;">{doctor_name}</td>
+                </tr>
+                <tr>
+                    <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Service</td>
+                    <td style="color: #1e293b; padding: 6px 0; font-size: 14px; text-align: right; font-weight: 500;">{service.name if service else "N/A"}</td>
+                </tr>
+                <tr>
+                    <td style="color: #64748b; padding: 6px 0; font-size: 14px;">Mode</td>
+                    <td style="color: #1e293b; padding: 6px 0; font-size: 14px; text-align: right; font-weight: 500;">{appointment.mode}</td>
+                </tr>
+            </table>
+        </div>
+
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; line-height: 1.5;">
+            Your payment and invoice remain attached to this appointment.<br>
+            You can view full details anytime in your dashboard.
+        </p>
+
+        <p style="color: #cbd5e1; font-size: 11px; text-align: center; margin-top: 24px;">
+            &copy; {__import__("datetime").datetime.now().year} CHO Health. All rights reserved.
+        </p>
+    </div>
+    '''
+
+    send_email(
+        to_email=patient.user.email,
+        subject='CHO Health - Appointment Rescheduled',
+        html_content=html,
+        attachments=[a for a in [_logo_attachment()] if a],
+    )
+
+
+def send_medicine_order_pickup_email(order, qr_png_bytes: bytes):
+    """Send the patient their pickup code and QR for a paid medicine order.
+
+    The QR encodes the same `pickup_code` that the patient also sees in plain
+    text — staff can either scan or type it at the branch. Fire-and-forget.
+    """
+    patient = order.patient
+    code = order.pickup_code or ''
+    branch_name = order.delivery_branch.name if order.delivery_branch else 'the selected branch'
+
+    items_rows = ''
+    for item in order.items.select_related('medication').all():
+        strength = f' {item.medication.strength}' if item.medication.strength else ''
+        line_total = f'${item.total:.2f}' if (item.unit_price or 0) > 0 else 'Free'
+        items_rows += f'''
+            <tr>
+                <td style="color: #1e293b; padding: 6px 0; font-size: 14px;">{item.medication.name}{strength} &times;{item.quantity}</td>
+                <td style="color: #64748b; padding: 6px 0; font-size: 14px; text-align: right;">{line_total}</td>
+            </tr>
+        '''
+
+    html = f'''
+    <div style="font-family: Inter, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+            <img src="cid:logo" alt="CHO Health" style="height: 120px; width: auto; margin-bottom: 8px;" />
+        </div>
+
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #166534; font-size: 14px; font-weight: 600; margin: 0;">
+                ✓ Your medicine order is ready to pick up
+            </p>
+        </div>
+
+        <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
+            Hi <strong>{patient.full_name}</strong>, your order is paid and ready to be picked up at
+            <strong>{branch_name}</strong>. Show the QR code below (or type the pickup code) to our staff
+            when you arrive and they will hand you your medication.
+        </p>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 24px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 12px;">Pickup Code</p>
+            <p style="color: #0f172a; font-family: 'Courier New', monospace; font-size: 24px; font-weight: 700; letter-spacing: 2px; margin: 0 0 20px;">{code}</p>
+            <img src="cid:pickup_qr" alt="Pickup QR" style="width: 200px; height: 200px;" />
+            <p style="color: #94a3b8; font-size: 11px; margin: 12px 0 0;">Scannable QR — same code as above</p>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <p style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px;">Items</p>
+            <table style="width: 100%; border-collapse: collapse;">
+                {items_rows}
+                <tr>
+                    <td style="color: #0f172a; padding: 12px 0 0; font-size: 14px; font-weight: 700; border-top: 1px solid #e2e8f0;">Total paid</td>
+                    <td style="color: #166534; padding: 12px 0 0; font-size: 16px; text-align: right; font-weight: 700; border-top: 1px solid #e2e8f0;">${order.total:.2f}</td>
+                </tr>
+            </table>
+        </div>
+
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; line-height: 1.5;">
+            This code is unique to you. Keep it safe until you pick up your order.
+        </p>
+
+        <p style="color: #cbd5e1; font-size: 11px; text-align: center; margin-top: 24px;">
+            &copy; {__import__("datetime").datetime.now().year} CHO Health. All rights reserved.
+        </p>
+    </div>
+    '''
+
+    # Build the inline attachment for the QR (referenced via cid:pickup_qr).
+    qr_attachment = Attachment()
+    qr_attachment.file_content = FileContent(base64.b64encode(qr_png_bytes).decode())
+    qr_attachment.file_name = FileName(f'pickup-{code}.png')
+    qr_attachment.file_type = FileType('image/png')
+    qr_attachment.disposition = Disposition('inline')
+    qr_attachment.content_id = ContentId('pickup_qr')
+
+    attachments = [a for a in [_logo_attachment(), qr_attachment] if a]
+
+    send_email(
+        to_email=patient.user.email,
+        subject=f'CHO Health - Your pickup code {code}',
+        html_content=html,
+        attachments=attachments,
+    )

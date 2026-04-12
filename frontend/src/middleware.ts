@@ -16,7 +16,7 @@ export function middleware(request: NextRequest) {
 
   // API route to switch locale
   if (pathname === '/api/set-locale') {
-    const locale = request.nextUrl.searchParams.get('locale') || 'es';
+    const locale = request.nextUrl.searchParams.get('locale') || 'en';
     const referer = request.headers.get('referer') || '/';
     const response = NextResponse.redirect(new URL(referer, request.url));
     response.cookies.set('locale', locale, { path: '/', maxAge: 60 * 60 * 24 * 365 });

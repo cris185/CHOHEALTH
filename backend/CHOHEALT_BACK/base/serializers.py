@@ -102,7 +102,7 @@ class AppointmentCreateSerializer(serializers.Serializer):
 
             conflicts = Appointment.objects.filter(
                 doctor=doctor,
-                status__in=['Scheduled', 'Confirmed', 'In Progress'],
+                status__in=['Confirmed', 'In Progress'],
             ).select_related('service')
 
             for appt in conflicts:
@@ -136,30 +136,63 @@ class AppointmentCreateSerializer(serializers.Serializer):
             issues=validated_data.get('issues', ''),
             symptoms=validated_data.get('symptoms', ''),
             notes=validated_data.get('notes', ''),
-            status='Scheduled',
+            status='Unpaid',
         )
         return appointment
 
 
 class AppointmentListSerializer(serializers.ModelSerializer):
     doctor_name = serializers.SerializerMethodField()
+    doctor_sid = serializers.SerializerMethodField()
     service_name = serializers.SerializerMethodField()
+    service_sid = serializers.SerializerMethodField()
+    service_cost = serializers.SerializerMethodField()
+    service_duration = serializers.SerializerMethodField()
     branch_name = serializers.SerializerMethodField()
+    invoice_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
-        fields = ('sid', 'date', 'status', 'mode', 'doctor_name', 'service_name', 'branch_name', 'issues', 'symptoms', 'notes', 'created_at')
+        fields = (
+            'sid', 'date', 'status', 'mode',
+            'doctor_name', 'doctor_sid',
+            'service_name', 'service_sid', 'service_cost', 'service_duration',
+            'branch_name',
+            'issues', 'symptoms', 'notes',
+            'invoice_status',
+            'cancelled_at', 'cancelled_by', 'cancel_reason',
+            'rescheduled_from', 'reschedule_count',
+            'created_at',
+        )
 
     def get_doctor_name(self, obj):
         if obj.doctor:
             return f'Dr. {obj.doctor.first_name} {obj.doctor.first_last_name}'
         return 'Lab Service'
 
+    def get_doctor_sid(self, obj):
+        return obj.doctor.sid if obj.doctor else None
+
     def get_service_name(self, obj):
         return obj.service.name if obj.service else None
 
+    def get_service_sid(self, obj):
+        return obj.service.sid if obj.service else None
+
+    def get_service_cost(self, obj):
+        return str(obj.service.cost) if obj.service else '0'
+
+    def get_service_duration(self, obj):
+        return obj.service.duration_minutes if obj.service else 30
+
     def get_branch_name(self, obj):
         return obj.branch.name if obj.branch else None
+
+    def get_invoice_status(self, obj):
+        try:
+            return obj.invoice.status
+        except Exception:
+            return None
 
 
 class DoctorAppointmentListSerializer(serializers.ModelSerializer):
@@ -205,8 +238,11 @@ class DoctorAppointmentDetailSerializer(serializers.ModelSerializer):
     patient_gender = serializers.SerializerMethodField()
     patient_blood_group = serializers.SerializerMethodField()
     service_name = serializers.SerializerMethodField()
+    service_sid = serializers.SerializerMethodField()
     service_duration = serializers.SerializerMethodField()
+    doctor_sid = serializers.SerializerMethodField()
     branch_name = serializers.SerializerMethodField()
+    invoice_status = serializers.SerializerMethodField()
 
     class Meta:
         model = Appointment
@@ -214,10 +250,18 @@ class DoctorAppointmentDetailSerializer(serializers.ModelSerializer):
             'sid', 'date', 'status', 'mode',
             'patient_name', 'patient_image', 'patient_email',
             'patient_phone', 'patient_date_of_birth', 'patient_gender', 'patient_blood_group',
-            'service_name', 'service_duration',
+            'doctor_sid',
+            'service_name', 'service_sid', 'service_duration',
             'branch_name', 'room', 'meeting_link',
-            'issues', 'symptoms', 'notes', 'created_at',
+            'issues', 'symptoms', 'notes',
+            'invoice_status',
+            'cancelled_at', 'cancelled_by', 'cancel_reason',
+            'rescheduled_from', 'reschedule_count',
+            'created_at',
         )
+
+    def get_doctor_sid(self, obj):
+        return obj.doctor.sid if obj.doctor else None
 
     def get_patient_name(self, obj):
         return obj.patient.full_name
@@ -245,11 +289,20 @@ class DoctorAppointmentDetailSerializer(serializers.ModelSerializer):
     def get_service_name(self, obj):
         return obj.service.name if obj.service else None
 
+    def get_service_sid(self, obj):
+        return obj.service.sid if obj.service else None
+
     def get_service_duration(self, obj):
         return obj.service.duration_minutes if obj.service else 30
 
     def get_branch_name(self, obj):
         return obj.branch.name if obj.branch else None
+
+    def get_invoice_status(self, obj):
+        try:
+            return obj.invoice.status
+        except Exception:
+            return None
 
 
 class ServiceDetailSerializer(serializers.ModelSerializer):

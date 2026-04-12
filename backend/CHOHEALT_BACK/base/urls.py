@@ -6,13 +6,18 @@ from .views import (
     BranchListView,
 )
 from .medical_views import (
-    DoctorAppointmentStatusUpdateView,
+    DoctorAppointmentStatusUpdateView, DoctorAppointmentCompleteView,
     MedicalRecordCreateView, PrescriptionCreateView, LabOrderCreateView,
     MedicationListView, LabTestListView,
     BookPrescribedLabAppointmentView,
     PrescriptionItemDeliveryStatusUpdateView,
     MedicationCatalogView, MedicineOrderCreateView,
     MedicineOrderListView, MedicineOrderDetailView,
+)
+from .appointment_actions import (
+    PatientAppointmentCancelView, PatientAppointmentRescheduleView,
+    PatientAppointmentDeleteView,
+    DoctorAppointmentCancelView, DoctorAppointmentRescheduleView,
 )
 
 urlpatterns = [
@@ -22,8 +27,14 @@ urlpatterns = [
     path('appointments/my/', AppointmentListView.as_view(), name='appointment-list'),
     path('appointments/doctor/', DoctorAppointmentListView.as_view(), name='doctor-appointment-list'),
     path('appointments/doctor/<str:sid>/status/', DoctorAppointmentStatusUpdateView.as_view(), name='doctor-appointment-status'),
+    path('appointments/doctor/<str:sid>/complete/', DoctorAppointmentCompleteView.as_view(), name='doctor-appointment-complete'),
+    path('appointments/doctor/<str:sid>/cancel/', DoctorAppointmentCancelView.as_view(), name='doctor-appointment-cancel'),
+    path('appointments/doctor/<str:sid>/reschedule/', DoctorAppointmentRescheduleView.as_view(), name='doctor-appointment-reschedule'),
     path('appointments/doctor/<str:sid>/medical-record/', MedicalRecordCreateView.as_view(), name='doctor-medical-record-create'),
     path('appointments/doctor/<str:sid>/', DoctorAppointmentDetailView.as_view(), name='doctor-appointment-detail'),
+    path('appointments/<str:sid>/cancel/', PatientAppointmentCancelView.as_view(), name='patient-appointment-cancel'),
+    path('appointments/<str:sid>/reschedule/', PatientAppointmentRescheduleView.as_view(), name='patient-appointment-reschedule'),
+    path('appointments/<str:sid>/delete/', PatientAppointmentDeleteView.as_view(), name='patient-appointment-delete'),
     path('appointments/book-prescribed-lab/', BookPrescribedLabAppointmentView.as_view(), name='book-prescribed-lab'),
     path('branches/', BranchListView.as_view(), name='branch-list'),
 
