@@ -95,6 +95,18 @@ class Appointment(models.Model):
     # Lab order link (for lab appointments fulfilling a prescribed order)
     lab_order = models.ForeignKey('LabOrder', on_delete=models.SET_NULL, null=True, blank=True, related_name='lab_appointments')
 
+    # Direct lab booking. Mutually exclusive with `service` by convention
+    # (NOT enforced at DB level — enforced by the booking endpoints). When set,
+    # payment/billing reads the cost from `lab_test.cost` and the `doctor` FK
+    # holds the lab staff that will perform the test.
+    lab_test = models.ForeignKey(
+        'LabTest',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='appointments',
+    )
+
     issues = models.TextField(blank=True)
     symptoms = models.TextField(blank=True)
     notes = models.TextField(blank=True)
@@ -183,6 +195,7 @@ class Medication(models.Model):
     name = models.CharField(max_length=200)
     generic_name = models.CharField(max_length=200, blank=True)
     description = models.TextField(blank=True)
+    image = models.FileField(upload_to='medication_images', blank=True)
     category = models.CharField(max_length=50, choices=MEDICATION_CATEGORY_CHOICES, default='Other')
     dosage_form = models.CharField(max_length=50, choices=DOSAGE_FORM_CHOICES, default='Tablet')
     strength = models.CharField(max_length=100, blank=True)
@@ -297,8 +310,27 @@ class LabTest(models.Model):
     name = models.CharField(max_length=200)
     category = models.CharField(max_length=50, choices=LAB_CATEGORY_CHOICES)
     description = models.TextField(blank=True)
+    image = models.FileField(upload_to='labtest_images', blank=True)
     cost = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    duration_minutes = models.PositiveIntegerField(default=30)
     is_active = models.BooleanField(default=True)
+
+    # Rx gating — mirrors `Medication`. When True, the patient needs an active
+    # prescription (LabOrder) to book or access the test.
+    requires_prescription = models.BooleanField(default=True)
+    free_when_prescribed = models.BooleanField(
+        default=True,
+        help_text=(
+            'When True, the lab is free of charge if a doctor prescribed it. '
+            'Patients booking directly (without prescription) still pay the full cost.'
+        ),
+    )
+
+    # Staff that can perform this lab test (ManyToMany to Doctor, same pattern
+    # as `Service.doctors`). These Doctor rows represent the lab staff — by
+    # convention they have `specialization='Laboratory'` or similar. Kept as
+    # `Doctor` to reuse `DoctorSchedule`, slot availability, booking views.
+    staff = models.ManyToManyField(Doctor, related_name='lab_tests', blank=True)
 
     def __str__(self):
         return f'{self.name} ({self.category})'
@@ -334,6 +366,11 @@ class LabOrderItem(models.Model):
     lab_order = models.ForeignKey(LabOrder, on_delete=models.CASCADE, related_name='items')
     test = models.ForeignKey(LabTest, on_delete=models.CASCADE, related_name='order_items')
     notes = models.TextField(blank=True)
+
+    # Set to True once the patient books the appointment that fulfils this
+    # prescribed test. Prevents the same prescription from being claimed (and
+    # billed free) more than once. Mirrors `PrescriptionItem.is_claimed`.
+    is_claimed = models.BooleanField(default=False)
 
     def __str__(self):
         return f'{self.test.name} - {self.lab_order.medical_record.patient.full_name}'

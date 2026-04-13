@@ -8,7 +8,8 @@ from .views import (
 from .medical_views import (
     DoctorAppointmentStatusUpdateView, DoctorAppointmentCompleteView,
     MedicalRecordCreateView, PrescriptionCreateView, LabOrderCreateView,
-    MedicationListView, LabTestListView,
+    MedicationListView, LabTestListView, LabTestCatalogView,
+    LabTestDetailView, BookDirectLabAppointmentView,
     BookPrescribedLabAppointmentView,
     PrescriptionItemDeliveryStatusUpdateView,
     MedicationCatalogView, MedicineOrderCreateView,
@@ -43,6 +44,9 @@ urlpatterns = [
     path('medical-records/<str:sid>/lab-order/', LabOrderCreateView.as_view(), name='lab-order-create'),
     path('medications/', MedicationListView.as_view(), name='medication-list'),
     path('lab-tests/', LabTestListView.as_view(), name='lab-test-list'),
+    path('lab-tests-catalog/', LabTestCatalogView.as_view(), name='lab-test-catalog'),
+    path('lab-tests-catalog/<str:sid>/', LabTestDetailView.as_view(), name='lab-test-detail'),
+    path('lab-tests/book/', BookDirectLabAppointmentView.as_view(), name='lab-test-book-direct'),
 
     # Delivery management
     path('prescription-items/<str:sid>/delivery-status/', PrescriptionItemDeliveryStatusUpdateView.as_view(), name='delivery-status-update'),

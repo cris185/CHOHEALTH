@@ -19,7 +19,7 @@
     "subtitle": "Manage your medical appointments quickly and easily. Connect with the best healthcare professionals.",
     "cta": "Get Started",
     "login": "Sign In",
-    "features": "Our Services",
+    "features": "\u00bfPor qu\u00e9 elegirnos?",
     "feature1Title": "Online Appointments",
     "feature1Desc": "Book in-person or virtual medical appointments from anywhere.",
     "feature2Title": "Medical History",
@@ -152,6 +152,7 @@
   },
   "booking": {
     "title": "Book Appointment",
+    "cancel": "Cancelar",
     "selectDate": "Select a date",
     "selectTime": "Select a time slot",
     "available": "Available",
@@ -194,7 +195,17 @@
     "legendFull": "Lleno",
     "slotsLeft": "{count} disp.",
     "slot": "horario",
-    "slots": "horarios"
+    "slots": "horarios",
+    "backToLabs": "Volver a laboratorios",
+    "pickStaff": "Elige un laboratorista",
+    "noLabStaff": "Actualmente no hay personal asignado para realizar este examen.",
+    "confirmLabBooking": "Confirmar reserva de laboratorio",
+    "totalToPay": "Total a pagar",
+    "coveredIfRxNote": "Si un doctor te ha prescrito este examen, la reserva ser\u00e1 gratuita. Confirma para verificar.",
+    "labBookedFree": "Examen reservado sin costo",
+    "labBookedFreeMsg": "Este examen est\u00e1 cubierto por tu prescripci\u00f3n activa. Sin pago.",
+    "viewMyAppointments": "Ver mis citas",
+    "requiresPrescriptionError": "Este examen requiere prescripci\u00f3n. Agenda una consulta con un doctor."
   },
   "dashboard": {
     "patient": {
@@ -227,6 +238,8 @@
         "noCatalogHint": "Los medicamentos del hospital aparecer\u00e1n aqu\u00ed.",
         "issuedBy": "Recetado por",
         "prescriptionNotes": "Notas",
+        "downloadPdf": "Descargar PDF",
+        "downloadError": "No se pudo descargar el PDF. Int\u00e9ntalo de nuevo.",
         "badgeFreeCovered": "Gratis \u2014 cubierto por el hospital",
         "badgeExternalPharmacy": "Comprar en farmacia externa",
         "badgeRxRequired": "Requiere prescripci\u00f3n",
@@ -307,14 +320,18 @@
       "labsPage": {
         "title": "Laboratorios",
         "tabOrders": "Mis \u00f3rdenes de laboratorio",
-        "tabBook": "Reservar examen",
+        "tabBook": "Ex\u00e1menes disponibles",
         "noOrders": "A\u00fan no tienes \u00f3rdenes de laboratorio",
         "noOrdersHint": "Tu doctor ordenar\u00e1 ex\u00e1menes despu\u00e9s de las citas, o puedes reservar directamente.",
         "labOrder": "Orden de laboratorio",
         "prescribedFree": "Recetado (Gratis)",
+        "downloadPdf": "Descargar PDF",
+        "downloadError": "No se pudo descargar el PDF. Int\u00e9ntalo de nuevo.",
         "test": "Examen",
         "category": "Categor\u00eda",
         "result": "Resultado",
+        "action": "Acci\u00f3n",
+        "alreadyBooked": "Ya reservado",
         "resultAvailable": "Disponible",
         "resultPending": "Pendiente",
         "bookFreeAppointment": "Agendar cita de laboratorio (Gratis)",
@@ -330,9 +347,16 @@
         "bookSuccess": "Cita de laboratorio reservada sin costo.",
         "bookDateRequired": "Por favor elige una fecha y hora.",
         "bookBranchRequired": "Por favor elige una sede.",
-        "noLabServices": "No hay servicios de laboratorio disponibles",
-        "noLabServicesHint": "Los servicios de ex\u00e1menes aparecer\u00e1n aqu\u00ed cuando se a\u00f1adan.",
-        "labServicesHint": "Explora los ex\u00e1menes disponibles y reserva una cita en una sede cercana."
+        "noLabServices": "No hay ex\u00e1menes disponibles",
+        "noLabServicesHint": "Los ex\u00e1menes aparecer\u00e1n aqu\u00ed cuando se a\u00f1adan al cat\u00e1logo.",
+        "labServicesHint": "Explora los ex\u00e1menes disponibles.",
+        "labCatalogHint": "Algunos ex\u00e1menes pueden reservarse directamente y pagarse en l\u00ednea. Otros requieren prescripci\u00f3n m\u00e9dica \u2014 para esos, agenda una consulta y tu doctor ordenar\u00e1 el examen sin costo.",
+        "bookConsultationCta": "Agendar una consulta",
+        "bookNowCta": "Reservar ahora",
+        "badgeRxRequired": "Requiere prescripci\u00f3n",
+        "badgeBookableDirectly": "Reserva directa",
+        "badgeFreeForYou": "Gratis para ti",
+        "badgeFreeForYouHint": "Tienes una prescripci\u00f3n activa para este examen \u2014 la reserva ser\u00e1 gratuita."
       }
     },
     "doctor": {
@@ -439,7 +463,12 @@
         "markAllRead": "Mark All as Read",
         "deleteAll": "Delete All",
         "noNotifications": "No notifications",
-        "confirmDeleteAll": "Are you sure you want to delete all notifications?",
+        "confirmDeleteAll": "\u00bfEst\u00e1s seguro de eliminar todas las notificaciones?",
+        "confirmDeleteAllTitle": "\u00bfEliminar todas las notificaciones?",
+        "confirmDeleteOneTitle": "\u00bfEliminar notificaci\u00f3n?",
+        "confirmDeleteMessage": "Esta acci\u00f3n no se puede deshacer.",
+        "confirmDeleteButton": "Eliminar",
+        "confirmCancelButton": "Cancelar",
         "deleted": "Notification deleted",
         "markedRead": "Marked as read"
       }

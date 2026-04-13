@@ -6,13 +6,9 @@ import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { services as servicesApi, Service } from '@/lib/api';
+import InitialsAvatar, { resolveImageUrl } from '@/components/InitialsAvatar';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
-
-function getImageUrl(image: string | null) {
-  if (!image) return null;
-  return image.startsWith('http') ? image : `${API_BASE}${image}`;
-}
 
 export default function ServiceDetailPage() {
   const { sid } = useParams<{ sid: string }>();
@@ -46,7 +42,7 @@ export default function ServiceDetailPage() {
 
   if (!service) return null;
 
-  const serviceImage = getImageUrl(service.image);
+  const serviceImage = resolveImageUrl(service.image, API_BASE);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -66,11 +62,15 @@ export default function ServiceDetailPage() {
                 <img src={serviceImage} alt={service.name} className="w-full object-contain" />
               </div>
             ) : (
-              <div className="flex h-64 w-full items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-700">
-                <svg className="h-20 w-20 text-white opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
-                </svg>
-              </div>
+              <InitialsAvatar
+                src={null}
+                name={service.name}
+                mode="words"
+                shape="rounded"
+                variant="primary"
+                className="h-64 w-full"
+                textClassName="text-6xl tracking-widest"
+              />
             )}
           </div>
 
@@ -106,19 +106,19 @@ export default function ServiceDetailPage() {
           ) : (
             <div className="mt-6 space-y-4">
               {service.doctors.map((doctor) => {
-                const doctorImage = getImageUrl(doctor.image);
+                const doctorImage = resolveImageUrl(doctor.image, API_BASE);
                 return (
                   <div key={doctor.sid} className="flex items-center justify-between rounded-lg bg-white p-6 shadow">
                     <div className="flex items-center gap-4">
-                      {doctorImage ? (
-                        <img src={doctorImage} alt={doctor.full_name} className="h-14 w-14 rounded-full object-cover" />
-                      ) : (
-                        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100">
-                          <svg className="h-7 w-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                          </svg>
-                        </div>
-                      )}
+                      <InitialsAvatar
+                        src={doctorImage}
+                        name={doctor.full_name}
+                        mode="person"
+                        shape="circle"
+                        variant="blue"
+                        className="h-14 w-14"
+                        textClassName="text-base"
+                      />
                       <div>
                         <h3 className="font-semibold text-gray-900">Dr. {doctor.full_name}</h3>
                         <p className="text-sm text-gray-500">{doctor.specialization} &middot; {doctor.years_of_experience} {t('services.experience')}</p>

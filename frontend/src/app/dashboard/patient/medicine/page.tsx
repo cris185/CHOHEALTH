@@ -11,12 +11,13 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Pill, ShoppingCart, FileText, ExternalLink, ShieldCheck, Package, Check,
+  Pill, ShoppingCart, FileText, ExternalLink, ShieldCheck, Package, Check, Download,
 } from 'lucide-react';
 import {
   patientMedicalRecords,
   medicineCatalog,
   medicineOrders,
+  patientPrescriptions,
   MedicineCatalogItem,
   PatientMedicalRecordDetail,
   PatientMedicalRecordListItem,
@@ -26,6 +27,16 @@ import {
 import CartCheckoutModal from '@/components/medicine/CartCheckoutModal';
 import OrderPickupCode from '@/components/medicine/OrderPickupCode';
 import PaymentModal from '@/components/booking/PaymentModal';
+import InitialsAvatar, { resolveImageUrl } from '@/components/InitialsAvatar';
+
+const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
+
+// Mirror of backend `_short_code()` so the badge matches the order
+// number printed inside the PDF.
+function formatRxCode(sid: string): string {
+  const s = sid.toUpperCase();
+  return `CHO-RX-${s.slice(0, 4)}-${s.slice(4, 8)}`;
+}
 
 const deliveryColors: Record<string, string> = {
   pending: 'bg-amber-50 text-amber-700 border-amber-200',
@@ -169,6 +180,15 @@ export default function MedicinePage() {
     loadOrders();
   };
 
+  const handleDownloadRxPdf = async (prescriptionSid: string) => {
+    try {
+      const token = localStorage.getItem('access_token') || '';
+      await patientPrescriptions.downloadPdf(prescriptionSid, token);
+    } catch {
+      setToast({ kind: 'error', text: t('downloadError') });
+    }
+  };
+
   const retryPayment = (order: MedicineOrderListItem) => {
     setPayOrderData({
       orderSid: order.sid,
@@ -226,11 +246,29 @@ export default function MedicinePage() {
               {records.map((record) => (
                 <Card key={record.sid}>
                   <CardHeader className="pb-2">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <CardTitle className="text-sm">{t('issuedBy')}: {record.doctor_name || '—'}</CardTitle>
-                      <span className="text-xs text-muted-foreground">
-                        {new Date(record.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-muted-foreground">
+                          {new Date(record.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        </span>
+                        {record.prescription && (
+                          <>
+                            <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
+                              {formatRxCode(record.prescription.sid)}
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="h-7 gap-1 text-xs"
+                              onClick={() => handleDownloadRxPdf(record.prescription!.sid)}
+                            >
+                              <Download className="h-3 w-3" />
+                              {t('downloadPdf')}
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
                     <p className="text-xs text-muted-foreground">{record.diagnosis}</p>
                   </CardHeader>
@@ -302,9 +340,31 @@ export default function MedicinePage() {
               {catalog.map((med) => {
                 const isFree = freeMedicationSids.has(med.sid);
                 const inCart = justAdded.has(med.sid);
+                const medImage = resolveImageUrl(med.image, API_BASE);
                 return (
-                  <Card key={med.sid} className="transition-shadow hover:shadow-md">
-                    <CardContent className="p-5">
+                  <Card key={med.sid} className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-md">
+                    {/* Image / initials header */}
+                    {medImage ? (
+                      <div className="flex h-40 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
+                        <img
+                          src={medImage}
+                          alt={med.name}
+                          className="h-full w-full object-cover object-center"
+                        />
+                      </div>
+                    ) : (
+                      <InitialsAvatar
+                        src={null}
+                        name={med.name}
+                        mode="words"
+                        shape="square"
+                        variant="primary"
+                        className="h-40 w-full"
+                        textClassName="text-4xl tracking-wider"
+                      />
+                    )}
+
+                    <CardContent className="flex flex-1 flex-col p-5">
                       <div className="flex items-start justify-between">
                         <div className="min-w-0 flex-1">
                           <h3 className="truncate text-sm font-semibold">{med.name}</h3>
@@ -328,7 +388,7 @@ export default function MedicinePage() {
                           </Badge>
                         )}
                       </div>
-                      <div className="mt-3 flex items-center justify-between">
+                      <div className="mt-auto pt-3 flex items-center justify-between">
                         {isFree ? (
                           <p className="text-lg font-bold text-emerald-700">$0.00 <span className="text-xs font-normal text-muted-foreground line-through">${med.cost}</span></p>
                         ) : (

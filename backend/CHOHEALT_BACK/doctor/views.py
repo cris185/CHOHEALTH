@@ -13,7 +13,7 @@ from .models import Doctor, DoctorQualification, DoctorSchedule, Notification
 from .serializers import DoctorScheduleSerializer, DoctorProfileSerializer, DoctorQualificationSerializer, DoctorQualificationCreateSerializer, NotificationSerializer
 from .permissions import IsDoctor
 from .utils import get_available_slots, get_available_days
-from base.models import Service, Appointment, Review
+from base.models import Service, Appointment, Review, LabTest
 from billing.models import Invoice
 
 
@@ -27,24 +27,55 @@ class DoctorScheduleListView(generics.ListAPIView):
         return DoctorSchedule.objects.filter(doctor=doctor, is_active=True)
 
 
+def _resolve_bookable(request):
+    """
+    Pull either `service_sid` or `lab_test_sid` from the querystring and return
+    the corresponding model instance. Returns (bookable, error_response_or_None).
+    """
+    service_sid = request.query_params.get('service_sid')
+    lab_test_sid = request.query_params.get('lab_test_sid')
+
+    if service_sid:
+        try:
+            return Service.objects.get(sid=service_sid), None
+        except Service.DoesNotExist:
+            return None, Response({'detail': 'Service not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    if lab_test_sid:
+        try:
+            return LabTest.objects.get(sid=lab_test_sid), None
+        except LabTest.DoesNotExist:
+            return None, Response({'detail': 'Lab test not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    return None, Response(
+        {'detail': 'service_sid or lab_test_sid is required.'},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+
+
 class AvailableDaysView(APIView):
+    """Month-level availability. Accepts either `service_sid` (consultation
+    booking) or `lab_test_sid` (lab booking). `sid` in the URL is the doctor's
+    SID for consultations or the lab staff's SID for labs — both are Doctor
+    rows in the DB."""
     permission_classes = [AllowAny]
 
     def get(self, request, sid):
         month_str = request.query_params.get('month')
-        service_sid = request.query_params.get('service_sid')
+        if not month_str:
+            return Response({'detail': 'month is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not month_str or not service_sid:
-            return Response({'detail': 'month and service_sid are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        bookable, error = _resolve_bookable(request)
+        if error:
+            return error
 
         try:
             year, month = map(int, month_str.split('-'))
             doctor = Doctor.objects.get(sid=sid)
-            service = Service.objects.get(sid=service_sid)
-        except (ValueError, Doctor.DoesNotExist, Service.DoesNotExist):
+        except (ValueError, Doctor.DoesNotExist):
             return Response({'detail': 'Invalid parameters.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        days = get_available_days(doctor, year, month, service)
+        days = get_available_days(doctor, year, month, bookable)
         return Response(days)
 
 
@@ -53,19 +84,20 @@ class AvailableSlotsView(APIView):
 
     def get(self, request, sid):
         date_str = request.query_params.get('date')
-        service_sid = request.query_params.get('service_sid')
+        if not date_str:
+            return Response({'detail': 'date is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        if not date_str or not service_sid:
-            return Response({'detail': 'date and service_sid are required.'}, status=status.HTTP_400_BAD_REQUEST)
+        bookable, error = _resolve_bookable(request)
+        if error:
+            return error
 
         try:
             date = datetime.strptime(date_str, '%Y-%m-%d').date()
             doctor = Doctor.objects.get(sid=sid)
-            service = Service.objects.get(sid=service_sid)
-        except (ValueError, Doctor.DoesNotExist, Service.DoesNotExist):
+        except (ValueError, Doctor.DoesNotExist):
             return Response({'detail': 'Invalid parameters.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        result = get_available_slots(doctor, date, service)
+        result = get_available_slots(doctor, date, bookable)
         return Response({'date': date_str, **result})
 
 

@@ -113,14 +113,23 @@ class CreateAppointmentWithPaymentView(APIView):
         }, status=status.HTTP_201_CREATED)
 
 
+def _appointment_bookable(appointment):
+    """Return the object an Appointment bills against — either its `service`
+    (consultation) or its `lab_test` (direct lab). Used everywhere payment
+    code needs to read `.cost` / `.name` / `.duration_minutes`.
+    """
+    return appointment.service or appointment.lab_test
+
+
 def _validate_appointment_for_payment(appointment):
     """
     Validates that an appointment is in a state where a payment can be initiated.
     Also re-checks slot availability against other confirmed bookings (defense
     against a concurrent booking that confirmed in the meantime).
 
-    Returns (service, error_message). If error_message is not None, the caller
-    should return a 400 with that message.
+    Returns (bookable, error_message). If error_message is not None, the caller
+    should return a 400 with that message. `bookable` is either the Service or
+    the LabTest the appointment bills against.
     """
     from base.appointment_actions import _validate_new_slot
 
@@ -131,20 +140,24 @@ def _validate_appointment_for_payment(appointment):
     if appointment.status not in ('Unpaid',):
         return None, f'Cannot pay for an appointment in "{appointment.status}" state.'
 
-    service = appointment.service
-    if not service:
-        return None, 'Appointment has no service attached.'
+    bookable = _appointment_bookable(appointment)
+    if not bookable:
+        return None, 'Appointment has no service or lab test attached.'
 
-    ok, error = _validate_new_slot(
-        doctor=appointment.doctor,
-        service=service,
-        new_date=appointment.date,
-        exclude_appointment=appointment,
-    )
-    if not ok:
-        return None, f'This time slot is no longer available: {error}'
+    # Slot re-validation only applies to consultations — labs are booked with
+    # date + branch granularity and don't contend with doctor schedules the
+    # same way. For safety we still run it for services.
+    if appointment.service:
+        ok, error = _validate_new_slot(
+            doctor=appointment.doctor,
+            service=appointment.service,
+            new_date=appointment.date,
+            exclude_appointment=appointment,
+        )
+        if not ok:
+            return None, f'This time slot is no longer available: {error}'
 
-    return service, None
+    return bookable, None
 
 
 class StripeCheckoutView(APIView):
@@ -162,7 +175,7 @@ class StripeCheckoutView(APIView):
         except Appointment.DoesNotExist:
             return Response({'detail': 'Appointment not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        service, error = _validate_appointment_for_payment(appointment)
+        bookable, error = _validate_appointment_for_payment(appointment)
         if error:
             return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -170,16 +183,22 @@ class StripeCheckoutView(APIView):
             customer_id = get_or_create_stripe_customer(request.user.patient)
             save_card = request.data.get('save_card', False)
 
+            line_item_label = 'Lab' if appointment.lab_test else 'Appointment'
+            line_item_desc = (
+                f'Dr. {appointment.doctor.first_name} {appointment.doctor.first_last_name}'
+                if appointment.doctor else 'Lab Service'
+            )
+
             session_params = {
                 'payment_method_types': ['card'],
                 'line_items': [{
                     'price_data': {
                         'currency': 'usd',
                         'product_data': {
-                            'name': f'Appointment: {service.name}',
-                            'description': f'Dr. {appointment.doctor.first_name} {appointment.doctor.first_last_name}' if appointment.doctor else 'Lab Service',
+                            'name': f'{line_item_label}: {bookable.name}',
+                            'description': line_item_desc,
                         },
-                        'unit_amount': int(service.cost * 100),
+                        'unit_amount': int(bookable.cost * 100),
                     },
                     'quantity': 1,
                 }],
@@ -228,13 +247,13 @@ class StripeSavedCardPayView(APIView):
         except Appointment.DoesNotExist:
             return Response({'detail': 'Appointment not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        service, error = _validate_appointment_for_payment(appointment)
+        bookable, error = _validate_appointment_for_payment(appointment)
         if error:
             return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
 
         try:
             payment_intent = stripe.PaymentIntent.create(
-                amount=int(service.cost * 100),
+                amount=int(bookable.cost * 100),
                 currency='usd',
                 customer=patient.stripe_customer_id,
                 payment_method=payment_method_id,
@@ -294,10 +313,12 @@ def _process_appointment_payment_success(appointment, payment_method, gateway_ch
     if gateway_charge_id and Payment.objects.filter(gateway_charge_id=gateway_charge_id).exists():
         return False
 
-    service = appointment.service
-    total = service.cost if service else Decimal('0')
+    # The billable object can be a Service (consultation) or a LabTest (direct
+    # lab booking). Both expose `.name` and `.cost` so the invoice line is
+    # identical either way; only the FK on the line differs.
+    bookable = _appointment_bookable(appointment)
+    total = bookable.cost if bookable else Decimal('0')
 
-    # Create Invoice as Paid immediately — this is the lazy creation point
     invoice = Invoice.objects.create(
         appointment=appointment,
         patient=appointment.patient,
@@ -309,14 +330,14 @@ def _process_appointment_payment_success(appointment, payment_method, gateway_ch
         issued_at=timezone.now(),
     )
 
-    if service:
+    if bookable:
         InvoiceLineItem.objects.create(
             invoice=invoice,
-            description=service.name,
+            description=bookable.name,
             quantity=1,
-            unit_price=service.cost,
-            total=service.cost,
-            service=service,
+            unit_price=bookable.cost,
+            total=bookable.cost,
+            service=appointment.service,  # None for lab-only appointments
         )
 
     Payment.objects.create(
@@ -570,7 +591,7 @@ class PayPalCreateOrderView(APIView):
         except Appointment.DoesNotExist:
             return Response({'detail': 'Appointment not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
-        service, error = _validate_appointment_for_payment(appointment)
+        bookable, error = _validate_appointment_for_payment(appointment)
         if error:
             return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
 
@@ -582,8 +603,8 @@ class PayPalCreateOrderView(APIView):
                 "cancel_url": f"{FRONTEND_URL}/dashboard/patient/booking/cancel?appointment={appointment.sid}",
             },
             "transactions": [{
-                "amount": {"total": f'{service.cost:.2f}', "currency": "USD"},
-                "description": f"Appointment: {service.name}",
+                "amount": {"total": f'{bookable.cost:.2f}', "currency": "USD"},
+                "description": f"{'Lab' if appointment.lab_test else 'Appointment'}: {bookable.name}",
                 "custom": appointment.sid,
             }],
         })

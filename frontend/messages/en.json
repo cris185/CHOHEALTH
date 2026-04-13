@@ -19,7 +19,7 @@
     "subtitle": "Manage your medical appointments quickly and easily. Connect with the best healthcare professionals.",
     "cta": "Get Started",
     "login": "Sign In",
-    "features": "Our Services",
+    "features": "Why Choose Us",
     "feature1Title": "Online Appointments",
     "feature1Desc": "Book in-person or virtual medical appointments from anywhere.",
     "feature2Title": "Medical History",
@@ -152,6 +152,7 @@
   },
   "booking": {
     "title": "Book Appointment",
+    "cancel": "Cancel",
     "selectDate": "Select a date",
     "selectTime": "Select a time slot",
     "available": "Available",
@@ -194,7 +195,17 @@
     "legendFull": "Full",
     "slotsLeft": "{count} left",
     "slot": "slot",
-    "slots": "slots"
+    "slots": "slots",
+    "backToLabs": "Back to Labs",
+    "pickStaff": "Choose a staff member",
+    "noLabStaff": "No staff is currently assigned to perform this lab.",
+    "confirmLabBooking": "Confirm Lab Booking",
+    "totalToPay": "Total to pay",
+    "coveredIfRxNote": "If a doctor has prescribed this test for you, the booking will be free. Confirm to check.",
+    "labBookedFree": "Lab booked free of charge",
+    "labBookedFreeMsg": "This lab is covered by your active prescription. No payment needed.",
+    "viewMyAppointments": "View my appointments",
+    "requiresPrescriptionError": "This lab requires a prescription. Book a consultation with a doctor."
   },
   "dashboard": {
     "patient": {
@@ -227,6 +238,8 @@
         "noCatalogHint": "Medications from the hospital will appear here.",
         "issuedBy": "Issued by",
         "prescriptionNotes": "Notes",
+        "downloadPdf": "Download PDF",
+        "downloadError": "Could not download the PDF. Please try again.",
         "badgeFreeCovered": "Free — covered by hospital",
         "badgeExternalPharmacy": "Buy at external pharmacy",
         "badgeRxRequired": "Requires prescription",
@@ -307,14 +320,18 @@
       "labsPage": {
         "title": "Labs",
         "tabOrders": "My Lab Orders",
-        "tabBook": "Book Lab Test",
+        "tabBook": "Available Tests",
         "noOrders": "No lab orders yet",
         "noOrdersHint": "Your doctor will order lab tests after appointments, or you can book directly.",
         "labOrder": "Lab Order",
         "prescribedFree": "Prescribed (Free)",
+        "downloadPdf": "Download PDF",
+        "downloadError": "Could not download the PDF. Please try again.",
         "test": "Test",
         "category": "Category",
         "result": "Result",
+        "action": "Action",
+        "alreadyBooked": "Already booked",
         "resultAvailable": "Available",
         "resultPending": "Pending",
         "bookFreeAppointment": "Book Lab Appointment (Free)",
@@ -330,9 +347,16 @@
         "bookSuccess": "Lab appointment booked for free.",
         "bookDateRequired": "Please pick a date and time.",
         "bookBranchRequired": "Please pick a branch.",
-        "noLabServices": "No lab services available",
-        "noLabServicesHint": "Lab test services will appear here when added.",
-        "labServicesHint": "Browse available lab tests and book an appointment at a branch near you."
+        "noLabServices": "No lab tests available",
+        "noLabServicesHint": "Lab tests will appear here when added to the catalog.",
+        "labServicesHint": "Browse available lab tests.",
+        "labCatalogHint": "Some lab tests can be booked directly and paid online. Others need a doctor's prescription — for those, book a consultation and your doctor will order the test for free.",
+        "bookConsultationCta": "Book a consultation",
+        "bookNowCta": "Book Now",
+        "badgeRxRequired": "Requires prescription",
+        "badgeBookableDirectly": "Bookable directly",
+        "badgeFreeForYou": "Free for you",
+        "badgeFreeForYouHint": "You have an active prescription for this lab — booking will be free."
       }
     },
     "doctor": {
@@ -440,6 +464,11 @@
         "deleteAll": "Delete All",
         "noNotifications": "No notifications",
         "confirmDeleteAll": "Are you sure you want to delete all notifications?",
+        "confirmDeleteAllTitle": "Delete all notifications?",
+        "confirmDeleteOneTitle": "Delete notification?",
+        "confirmDeleteMessage": "This action cannot be undone.",
+        "confirmDeleteButton": "Delete",
+        "confirmCancelButton": "Cancel",
         "deleted": "Notification deleted",
         "markedRead": "Marked as read"
       }

@@ -2,16 +2,19 @@ from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.views import APIView
+from django.http import HttpResponse
 
 from .permissions import IsPatient
 from .serializers import PatientProfileSerializer, PatientNotificationSerializer
 from doctor.models import Notification
-from base.models import Appointment, MedicalRecord, LabOrder, PrescriptionItem, Branch
+from base.models import Appointment, MedicalRecord, LabOrder, Prescription, PrescriptionItem, Branch
 from base.medical_serializers import (
     MedicalRecordListSerializer, MedicalRecordDetailSerializer,
     PrescriptionDetailSerializer, LabOrderDetailSerializer,
     LabResultDetailSerializer, DeliveryRequestSerializer,
 )
+from userauths.services.pdf_prescription import generate_prescription_pdf
+from userauths.services.pdf_lab_order import generate_lab_order_pdf
 
 
 class PatientProfileView(generics.RetrieveUpdateAPIView):
@@ -191,3 +194,57 @@ class PrescriptionItemDeliveryRequestView(APIView):
         item.save()
 
         return Response({'detail': f'Delivery requested ({item.delivery_method}).'})
+
+
+class PatientPrescriptionPDFView(APIView):
+    """Stream a PDF of the patient's prescription. Generated on-demand, not
+    persisted — every download regenerates from the current DB state.
+    """
+    permission_classes = [IsPatient]
+
+    def get(self, request, sid):
+        try:
+            prescription = Prescription.objects.select_related(
+                'medical_record__patient__user',
+                'medical_record__doctor',
+                'medical_record__appointment__branch',
+            ).prefetch_related(
+                'items__medication',
+            ).get(
+                sid=sid,
+                medical_record__patient=request.user.patient,
+            )
+        except Prescription.DoesNotExist:
+            return Response({'detail': 'Prescription not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        pdf_bytes = generate_prescription_pdf(prescription)
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        filename = f'prescription-{prescription.sid[:8].upper()}.pdf'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response
+
+
+class PatientLabOrderPDFView(APIView):
+    """Stream a PDF of the patient's lab order."""
+    permission_classes = [IsPatient]
+
+    def get(self, request, sid):
+        try:
+            lab_order = LabOrder.objects.select_related(
+                'medical_record__patient__user',
+                'medical_record__doctor',
+                'medical_record__appointment__branch',
+            ).prefetch_related(
+                'items__test',
+            ).get(
+                sid=sid,
+                medical_record__patient=request.user.patient,
+            )
+        except LabOrder.DoesNotExist:
+            return Response({'detail': 'Lab order not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        pdf_bytes = generate_lab_order_pdf(lab_order)
+        response = HttpResponse(pdf_bytes, content_type='application/pdf')
+        filename = f'lab-order-{lab_order.sid[:8].upper()}.pdf'
+        response['Content-Disposition'] = f'attachment; filename="{filename}"'
+        return response

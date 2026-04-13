@@ -7,6 +7,7 @@ from .views import (
     PatientMedicalRecordListView, PatientMedicalRecordDetailView,
     PatientLabOrderListView, PatientLabResultDetailView,
     PrescriptionItemDeliveryRequestView,
+    PatientPrescriptionPDFView, PatientLabOrderPDFView,
 )
 
 urlpatterns = [
@@ -26,4 +27,8 @@ urlpatterns = [
     path('patient/lab-orders/', PatientLabOrderListView.as_view(), name='patient-lab-orders'),
     path('patient/lab-results/<str:sid>/', PatientLabResultDetailView.as_view(), name='patient-lab-result-detail'),
     path('patient/prescription-items/<str:sid>/request-delivery/', PrescriptionItemDeliveryRequestView.as_view(), name='delivery-request'),
+
+    # PDF downloads (generated on-the-fly, not stored).
+    path('patient/prescriptions/<str:sid>/pdf/', PatientPrescriptionPDFView.as_view(), name='patient-prescription-pdf'),
+    path('patient/lab-orders/<str:sid>/pdf/', PatientLabOrderPDFView.as_view(), name='patient-lab-order-pdf'),
 ]

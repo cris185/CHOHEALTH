@@ -120,11 +120,11 @@ export default function ServiceCarousel({ showBookButton = true, clickable = fal
       {/* Scrollable track */}
       <div
         ref={scrollRef}
-        className="flex gap-6 overflow-x-auto pb-4 scrollbar-hide"
+        className="flex items-stretch gap-6 overflow-x-auto pb-4 scrollbar-hide"
         style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
       >
         {servicesList.map((service) => (
-          <div key={service.sid} className="w-[300px] shrink-0">
+          <div key={service.sid} className="flex w-[300px] shrink-0">
             <ServiceCard service={service} showBookButton={showBookButton} clickable={clickable} />
           </div>
         ))}

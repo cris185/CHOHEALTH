@@ -54,7 +54,7 @@ export default function RescheduleModal({
     if (!isOpen || !doctorSid || !serviceSid) return;
     setLoading(true);
     setError('');
-    doctorsApi.availableDays(doctorSid, currentMonth, serviceSid)
+    doctorsApi.availableDays(doctorSid, currentMonth, { serviceSid })
       .then(setDays)
       .catch(() => setDays([]))
       .finally(() => setLoading(false));
@@ -67,7 +67,7 @@ export default function RescheduleModal({
       return;
     }
     setLoading(true);
-    doctorsApi.availableSlots(doctorSid, selectedDate, serviceSid)
+    doctorsApi.availableSlots(doctorSid, selectedDate, { serviceSid })
       .then(setDaySlots)
       .catch(() => setDaySlots(null))
       .finally(() => setLoading(false));

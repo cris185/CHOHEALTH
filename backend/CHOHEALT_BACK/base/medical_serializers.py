@@ -16,14 +16,44 @@ class MedicationSerializer(serializers.ModelSerializer):
         model = Medication
         fields = (
             'sid', 'name', 'generic_name', 'category', 'dosage_form', 'strength',
-            'cost', 'requires_prescription', 'free_when_prescribed',
+            'cost', 'requires_prescription', 'free_when_prescribed', 'image',
         )
 
 
 class LabTestSerializer(serializers.ModelSerializer):
     class Meta:
         model = LabTest
-        fields = ('sid', 'name', 'category', 'description', 'cost')
+        fields = (
+            'sid', 'name', 'category', 'description', 'cost', 'image',
+            'duration_minutes', 'requires_prescription', 'free_when_prescribed',
+        )
+
+
+class LabTestDetailSerializer(serializers.ModelSerializer):
+    """Detail view for patients — includes the staff that can perform it."""
+    staff = serializers.SerializerMethodField()
+
+    class Meta:
+        model = LabTest
+        fields = (
+            'sid', 'name', 'category', 'description', 'cost', 'image',
+            'duration_minutes', 'requires_prescription', 'free_when_prescribed',
+            'staff',
+        )
+
+    def get_staff(self, obj):
+        return [
+            {
+                'sid': d.sid,
+                'full_name': d.full_name,
+                'first_name': d.first_name,
+                'first_last_name': d.first_last_name,
+                'image': d.image.url if d.image else None,
+                'specialization': d.specialization,
+                'years_of_experience': d.years_of_experience,
+            }
+            for d in obj.staff.all()
+        ]
 
 
 # ============================================================================
@@ -194,13 +224,17 @@ class PrescriptionDetailSerializer(serializers.ModelSerializer):
 
 
 class LabOrderItemDetailSerializer(serializers.ModelSerializer):
+    test_sid = serializers.CharField(source='test.sid', read_only=True)
     test_name = serializers.CharField(source='test.name', read_only=True)
     test_category = serializers.CharField(source='test.category', read_only=True)
     has_result = serializers.SerializerMethodField()
 
     class Meta:
         model = LabOrderItem
-        fields = ('sid', 'test_name', 'test_category', 'notes', 'has_result')
+        fields = (
+            'sid', 'test_sid', 'test_name', 'test_category',
+            'notes', 'is_claimed', 'has_result',
+        )
 
     def get_has_result(self, obj):
         return hasattr(obj, 'result')
@@ -283,8 +317,9 @@ class MedicationCatalogSerializer(serializers.ModelSerializer):
     class Meta:
         model = Medication
         fields = (
-            'sid', 'name', 'generic_name', 'description', 'category', 'dosage_form',
-            'strength', 'cost', 'requires_prescription', 'free_when_prescribed',
+            'sid', 'name', 'generic_name', 'description', 'image', 'category',
+            'dosage_form', 'strength', 'cost', 'requires_prescription',
+            'free_when_prescribed',
         )
 
 

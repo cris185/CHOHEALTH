@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { doctors as doctorsApi, services as servicesApi, Service, DayInfo } from '@/lib/api';
 import MonthCalendar from '@/components/booking/MonthCalendar';
+import InitialsAvatar, { resolveImageUrl } from '@/components/InitialsAvatar';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -50,7 +51,7 @@ export default function BookingPage() {
     if (doctorSid && serviceSid) {
       setCalLoading(true);
       const monthStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
-      doctorsApi.availableDays(doctorSid, monthStr, serviceSid)
+      doctorsApi.availableDays(doctorSid, monthStr, { serviceSid })
         .then(setAvailableDays)
         .catch(() => setAvailableDays([]))
         .finally(() => setCalLoading(false));
@@ -77,9 +78,7 @@ export default function BookingPage() {
     );
   }
 
-  const doctorImage = selectedDoctor.image
-    ? selectedDoctor.image.startsWith('http') ? selectedDoctor.image : `${API_BASE}${selectedDoctor.image}`
-    : null;
+  const doctorImage = resolveImageUrl(selectedDoctor.image, API_BASE);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -96,15 +95,15 @@ export default function BookingPage() {
 
         {/* Doctor + Service Info */}
         <div className="mb-8 flex items-center gap-4 rounded-xl bg-white p-5 shadow-sm border border-gray-100">
-          {doctorImage ? (
-            <img src={doctorImage} alt={selectedDoctor.full_name} className="h-16 w-16 rounded-full object-cover" />
-          ) : (
-            <div className="flex h-16 w-16 items-center justify-center rounded-full bg-blue-100">
-              <svg className="h-8 w-8 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-          )}
+          <InitialsAvatar
+            src={doctorImage}
+            name={selectedDoctor.full_name}
+            mode="person"
+            shape="circle"
+            variant="blue"
+            className="h-16 w-16"
+            textClassName="text-lg"
+          />
           <div>
             <h2 className="font-semibold text-gray-900">Dr. {selectedDoctor.full_name}</h2>
             <p className="text-sm text-gray-500">{selectedDoctor.specialization}</p>

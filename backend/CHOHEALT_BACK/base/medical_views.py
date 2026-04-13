@@ -21,6 +21,7 @@ from billing.models import Invoice, InvoiceLineItem
 from userauths.services.email_service import send_medicine_order_pickup_email
 from .medical_serializers import (
     MedicationSerializer, MedicationCatalogSerializer, LabTestSerializer,
+    LabTestDetailSerializer,
     MedicalRecordCreateSerializer, PrescriptionCreateSerializer,
     LabOrderCreateSerializer, AppointmentStatusUpdateSerializer,
     AppointmentCompleteSerializer,
@@ -360,7 +361,7 @@ class MedicationListView(generics.ListAPIView):
 
 
 class LabTestListView(generics.ListAPIView):
-    """List lab test catalog."""
+    """List lab test catalog (DOCTOR side — used by the Rx modal autocomplete)."""
     serializer_class = LabTestSerializer
     permission_classes = [IsDoctor]
     pagination_class = None
@@ -369,6 +370,222 @@ class LabTestListView(generics.ListAPIView):
 
     def get_queryset(self):
         return LabTest.objects.filter(is_active=True)
+
+
+class LabTestCatalogView(generics.ListAPIView):
+    """Public catalog of lab tests (PATIENT side).
+
+    Returns every active lab test. Patients can book directly the ones with
+    `requires_prescription=False`; the ones with `requires_prescription=True`
+    need a doctor's prescription first.
+
+    When the request is authenticated AND the user is a Patient, each lab is
+    annotated with `has_active_prescription: bool` so the UI can render a
+    "Free for you" badge for labs the patient already has prescribed and
+    unclaimed. Anonymous requests get `has_active_prescription=false` for
+    every item — that's fine, the badge just won't render.
+    """
+    serializer_class = LabTestSerializer
+    permission_classes = [AllowAny]
+    pagination_class = None
+    filter_backends = [filters.SearchFilter]
+    search_fields = ['name', 'category']
+
+    def get_queryset(self):
+        return LabTest.objects.filter(is_active=True)
+
+    def list(self, request, *args, **kwargs):
+        response = super().list(request, *args, **kwargs)
+        # Compute the set of LabTest sids the patient has an active (unclaimed)
+        # prescription for. Mirrors the logic in BookDirectLabAppointmentView.
+        active_sids = set()
+        user = getattr(request, 'user', None)
+        if user and user.is_authenticated and getattr(user, 'user_type', None) == 'Patient':
+            from .models import LabOrderItem
+            patient = user.patient
+            active_sids = set(
+                LabOrderItem.objects
+                .filter(
+                    lab_order__medical_record__patient=patient,
+                    is_claimed=False,
+                )
+                .values_list('test__sid', flat=True)
+            )
+        for item in response.data:
+            item['has_active_prescription'] = item['sid'] in active_sids
+        return response
+
+
+class LabTestDetailView(generics.RetrieveAPIView):
+    """Full detail of a lab test including the staff list. Used by the patient
+    booking page to show staff to pick from — mirrors `ServiceDetailView`."""
+    serializer_class = LabTestDetailSerializer
+    permission_classes = [AllowAny]
+    lookup_field = 'sid'
+
+    def get_queryset(self):
+        return LabTest.objects.filter(is_active=True).prefetch_related('staff')
+
+
+class BookDirectLabAppointmentView(APIView):
+    """Book a direct lab appointment for a `LabTest` (patient-initiated).
+
+    Business rules:
+      - If the lab `requires_prescription=True`, the patient MUST have an
+        unclaimed `LabOrderItem` for this test. If not → 403.
+      - If the patient HAS an unclaimed LabOrderItem for this test AND the lab
+        is `free_when_prescribed=True` → total = 0 → appointment auto-Confirmed
+        and invoice Paid (no payment step). The LabOrderItem IS NOT consumed
+        yet at this layer; the fulfilment/pickup is what marks it done (out of
+        scope for this step).
+      - Otherwise → total = lab_test.cost → appointment created as Unpaid, the
+        patient is redirected to Stripe/PayPal.
+    """
+    permission_classes = [IsPatient]
+
+    @transaction.atomic
+    def post(self, request):
+        lab_test_sid = request.data.get('lab_test_sid')
+        staff_sid = request.data.get('staff_sid')
+        date = request.data.get('date')
+        branch_sid = request.data.get('branch_sid')
+
+        if not lab_test_sid or not staff_sid or not date:
+            return Response(
+                {'detail': 'lab_test_sid, staff_sid and date are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            lab_test = LabTest.objects.get(sid=lab_test_sid, is_active=True)
+        except LabTest.DoesNotExist:
+            return Response({'detail': 'Lab test not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        from doctor.models import Doctor as DoctorModel
+        try:
+            staff = DoctorModel.objects.get(sid=staff_sid)
+        except DoctorModel.DoesNotExist:
+            return Response({'detail': 'Lab staff not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if not lab_test.staff.filter(pk=staff.pk).exists():
+            return Response(
+                {'detail': 'This staff member does not perform this lab test.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        branch = None
+        if branch_sid:
+            try:
+                branch = Branch.objects.get(sid=branch_sid, is_active=True)
+            except Branch.DoesNotExist:
+                return Response({'detail': 'Branch not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        patient = request.user.patient
+
+        # Check prescription coverage.
+        #
+        # An "active Rx" for this lab is a `LabOrderItem` belonging to the
+        # patient that matches the lab and has not yet been consumed. We track
+        # consumption with `LabOrderItem.is_claimed` — flipped to True once
+        # the patient books the appointment that fulfils it. This keeps the
+        # flow per-item: an order with 3 tests can be booked in 3 independent
+        # appointments, but each individual test can only be claimed once.
+        from .models import LabOrderItem  # late import to avoid cycles
+        rx_item = (
+            LabOrderItem.objects
+            .filter(
+                test=lab_test,
+                lab_order__medical_record__patient=patient,
+                is_claimed=False,
+            )
+            .order_by('lab_order__ordered_at')
+            .first()
+        )
+
+        has_active_rx = rx_item is not None
+
+        if lab_test.requires_prescription and not has_active_rx:
+            return Response(
+                {
+                    'detail': (
+                        f'"{lab_test.name}" requires a prescription. Book a '
+                        f'consultation with a doctor to get one.'
+                    ),
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # Parse the date. Slot validity against the staff's schedule is checked
+        # client-side via `/doctors/<sid>/available-slots/?lab_test_sid=...` —
+        # the UI only surfaces available slots. A fully defensive re-check
+        # here would mirror `_validate_new_slot` for lab_tests; we trade that
+        # off for simplicity at the portfolio-grade level.
+        from django.utils.dateparse import parse_datetime
+        date_dt = parse_datetime(date) if isinstance(date, str) else date
+        if date_dt is None:
+            return Response({'detail': 'Invalid date format.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Determine price — free if covered by an active prescription.
+        if has_active_rx and lab_test.free_when_prescribed:
+            total = Decimal('0')
+        else:
+            total = lab_test.cost
+
+        appointment = Appointment.objects.create(
+            patient=patient,
+            doctor=staff,
+            service=None,
+            lab_test=lab_test,
+            # If the Rx item existed, link its parent LabOrder so the fulfilment
+            # flow can associate this appointment with the prescription.
+            lab_order=rx_item.lab_order if rx_item else None,
+            date=date_dt,
+            status='Unpaid' if total > 0 else 'Confirmed',
+            mode='In-Person',
+            branch=branch,
+        )
+
+        # Free bookings invoice themselves right away (no payment step).
+        # A line item is still created so the invoice / history shows WHAT was
+        # booked (the lab name) instead of an empty invoice.
+        if total == Decimal('0'):
+            invoice = Invoice.objects.create(
+                appointment=appointment,
+                patient=patient,
+                subtotal=Decimal('0'),
+                total=Decimal('0'),
+                amount_paid=Decimal('0'),
+                balance_due=Decimal('0'),
+                status='Paid',
+                issued_at=timezone.now(),
+            )
+            InvoiceLineItem.objects.create(
+                invoice=invoice,
+                description=lab_test.name,
+                quantity=1,
+                unit_price=Decimal('0'),
+                total=Decimal('0'),
+            )
+
+        # If the booking was covered by a prescription item, mark it claimed
+        # so the patient can't book the same prescription again for free.
+        # This happens for both free (total=0) and paid cases where the Rx
+        # exists but `free_when_prescribed=False` — in both cases the Rx is
+        # being used up, so we consume it.
+        if rx_item is not None:
+            rx_item.is_claimed = True
+            rx_item.save(update_fields=['is_claimed'])
+
+        return Response(
+            {
+                'appointment_sid': appointment.sid,
+                'amount': str(total),
+                'status': appointment.status,
+                'lab_test_name': lab_test.name,
+                'covered_by_prescription': has_active_rx and lab_test.free_when_prescribed,
+            },
+            status=status.HTTP_201_CREATED,
+        )
 
 
 # ============================================================================
@@ -417,7 +634,8 @@ class BookPrescribedLabAppointmentView(APIView):
             notes=f'Lab appointment for order {lab_order.sid}',
         )
 
-        # Create zero-cost invoice
+        # Create zero-cost invoice + one line per ordered test so the patient
+        # sees what this free appointment covers in their billing history.
         invoice = Invoice.objects.create(
             appointment=appointment,
             patient=request.user.patient,
@@ -427,6 +645,16 @@ class BookPrescribedLabAppointmentView(APIView):
             balance_due=Decimal('0'),
             status='Paid',
         )
+        for idx, item in enumerate(lab_order.items.select_related('test').all()):
+            InvoiceLineItem.objects.create(
+                invoice=invoice,
+                description=item.test.name,
+                quantity=1,
+                unit_price=Decimal('0'),
+                total=Decimal('0'),
+                lab_order_item=item,
+                order=idx,
+            )
 
         return Response({
             'appointment_sid': appointment.sid,

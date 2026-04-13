@@ -9,6 +9,7 @@ import {
   SavedCard,
   PaymentTarget,
 } from '@/lib/api';
+import StripeTestCardHelper from './StripeTestCardHelper';
 // NOTE: El retorno desde Stripe/PayPal vía botón "atrás" se reconcilia en las
 // páginas que renderizan este modal usando el hook `useBfcacheRefetch`. No es
 // necesario (ni deseable) empujar una ruta "segura" al historial antes del
@@ -182,6 +183,9 @@ export default function PaymentModal({
             <p className="text-4xl font-bold tracking-tight mt-2">${amount}</p>
             <p className="mt-2 text-sm text-muted-foreground">{serviceName}</p>
           </div>
+
+          {/* Demo mode helper — only renders in non-prod / test mode */}
+          <StripeTestCardHelper />
 
           <p className="text-xs font-medium uppercase tracking-wider text-muted-foreground text-center">Choose payment method</p>
 

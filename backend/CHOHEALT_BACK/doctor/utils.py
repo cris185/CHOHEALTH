@@ -4,7 +4,7 @@ from django.utils import timezone
 import zoneinfo
 
 from .models import Doctor, DoctorSchedule
-from base.models import Appointment, Service
+from base.models import Appointment  # noqa: F401 — Service/LabTest typed via docstring
 
 
 tz = zoneinfo.ZoneInfo(settings.TIME_ZONE)
@@ -19,13 +19,17 @@ BLOCKING_STATUSES = ['Confirmed', 'In Progress']
 SLOT_INTERVAL_MINUTES = 30
 
 
-def get_available_slots(doctor: Doctor, date, service: Service) -> dict:
+def get_available_slots(doctor: Doctor, date, bookable) -> dict:
     """
     Compute available time slots for a doctor on a specific date.
+    `bookable` is anything with a `.duration_minutes` attribute — currently
+    either a `Service` or a `LabTest`.
+
     Slots are generated at FIXED 30-minute intervals. For each slot we check
-    whether the full service duration fits without overlapping a break, exceeding
-    the shift end, or conflicting with an existing appointment. The slot carries
-    an `unavailable_reason` so the frontend can display a helpful message.
+    whether the full service/lab duration fits without overlapping a break,
+    exceeding the shift end, or conflicting with an existing appointment. The
+    slot carries an `unavailable_reason` so the frontend can display a helpful
+    message.
     """
     day_of_week = date.weekday()
     schedules = DoctorSchedule.objects.filter(
@@ -35,7 +39,7 @@ def get_available_slots(doctor: Doctor, date, service: Service) -> dict:
     if not schedules.exists():
         return {'schedules': [], 'slots': [], 'summary': _empty_summary()}
 
-    service_duration = timedelta(minutes=service.duration_minutes)
+    service_duration = timedelta(minutes=bookable.duration_minutes)
     step = timedelta(minutes=SLOT_INTERVAL_MINUTES)
 
     # Get all booked appointments for this doctor on this date (one query)
@@ -138,10 +142,11 @@ def _empty_summary():
     }
 
 
-def get_available_days(doctor: Doctor, year: int, month: int, service: Service) -> list[dict]:
+def get_available_days(doctor: Doctor, year: int, month: int, bookable) -> list[dict]:
     """
-    Returns list of dicts with date and occupancy info where the doctor
-    has a schedule in the given month (including fully-booked days).
+    Returns list of dicts with date and occupancy info where the doctor has a
+    schedule in the given month (including fully-booked days). `bookable` is
+    any object with `.duration_minutes` (Service or LabTest).
     """
     import calendar
 
@@ -162,7 +167,7 @@ def get_available_days(doctor: Doctor, year: int, month: int, service: Service) 
         if d < today:
             continue
         if d.weekday() in working_days:
-            result = get_available_slots(doctor, d, service)
+            result = get_available_slots(doctor, d, bookable)
             summary = result['summary']
             # Include all working days (even fully booked ones)
             if summary['total_slots'] > 0:

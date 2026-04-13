@@ -174,16 +174,32 @@ class AppointmentListSerializer(serializers.ModelSerializer):
         return obj.doctor.sid if obj.doctor else None
 
     def get_service_name(self, obj):
-        return obj.service.name if obj.service else None
+        # `service_name` is the column the frontend shows regardless of
+        # whether the appointment is a consultation (has `service`) or a
+        # direct lab booking (has `lab_test`). Falling back to `lab_test.name`
+        # keeps the UI consistent — no more "N/A" on lab appointments.
+        if obj.service:
+            return obj.service.name
+        if obj.lab_test:
+            return obj.lab_test.name
+        return None
 
     def get_service_sid(self, obj):
         return obj.service.sid if obj.service else None
 
     def get_service_cost(self, obj):
-        return str(obj.service.cost) if obj.service else '0'
+        if obj.service:
+            return str(obj.service.cost)
+        if obj.lab_test:
+            return str(obj.lab_test.cost)
+        return '0'
 
     def get_service_duration(self, obj):
-        return obj.service.duration_minutes if obj.service else 30
+        if obj.service:
+            return obj.service.duration_minutes
+        if obj.lab_test:
+            return obj.lab_test.duration_minutes
+        return 30
 
     def get_branch_name(self, obj):
         return obj.branch.name if obj.branch else None
@@ -220,10 +236,18 @@ class DoctorAppointmentListSerializer(serializers.ModelSerializer):
         return None
 
     def get_service_name(self, obj):
-        return obj.service.name if obj.service else None
+        if obj.service:
+            return obj.service.name
+        if obj.lab_test:
+            return obj.lab_test.name
+        return None
 
     def get_service_duration(self, obj):
-        return obj.service.duration_minutes if obj.service else 30
+        if obj.service:
+            return obj.service.duration_minutes
+        if obj.lab_test:
+            return obj.lab_test.duration_minutes
+        return 30
 
     def get_branch_name(self, obj):
         return obj.branch.name if obj.branch else None
@@ -287,13 +311,21 @@ class DoctorAppointmentDetailSerializer(serializers.ModelSerializer):
         return obj.patient.blood_group
 
     def get_service_name(self, obj):
-        return obj.service.name if obj.service else None
+        if obj.service:
+            return obj.service.name
+        if obj.lab_test:
+            return obj.lab_test.name
+        return None
 
     def get_service_sid(self, obj):
         return obj.service.sid if obj.service else None
 
     def get_service_duration(self, obj):
-        return obj.service.duration_minutes if obj.service else 30
+        if obj.service:
+            return obj.service.duration_minutes
+        if obj.lab_test:
+            return obj.lab_test.duration_minutes
+        return 30
 
     def get_branch_name(self, obj):
         return obj.branch.name if obj.branch else None

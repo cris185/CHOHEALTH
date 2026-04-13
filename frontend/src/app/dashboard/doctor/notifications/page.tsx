@@ -10,18 +10,22 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Bell, Check, Trash2 } from 'lucide-react';
+import ConfirmDialog from '@/components/ConfirmDialog';
 
 type FilterStatus = 'all' | 'unread' | 'read';
+type PendingDelete = null | 'all' | { sid: string };
 
 export default function DoctorNotificationsPage() {
   const { user, loading: authLoading } = useAuth();
-  useTranslations();
+  const t = useTranslations('dashboard.doctor.notificationsPage');
   const router = useRouter();
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(1);
   const [filter, setFilter] = useState<FilterStatus>('all');
   const [loading, setLoading] = useState(true);
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -46,24 +50,32 @@ export default function DoctorNotificationsPage() {
     setItems((prev) => prev.map((n) => n.sid === sid ? { ...n, is_read: true } : n));
   };
 
-  const handleDelete = async (sid: string) => {
-    const token = localStorage.getItem('access_token') || '';
-    await notificationsApi.delete(sid, token).catch(() => {});
-    setItems((prev) => prev.filter((n) => n.sid !== sid));
-    setTotalCount((prev) => prev - 1);
-  };
-
   const handleMarkAllRead = async () => {
     const token = localStorage.getItem('access_token') || '';
     await notificationsApi.markAllRead(token).catch(() => {});
     setItems((prev) => prev.map((n) => ({ ...n, is_read: true })));
   };
 
-  const handleDeleteAll = async () => {
-    if (!confirm('Are you sure you want to delete all notifications?')) return;
+  /** Runs the actual delete once the ConfirmDialog's confirm button is pressed. */
+  const confirmPendingDelete = async () => {
+    if (!pendingDelete) return;
+    setDeleting(true);
     const token = localStorage.getItem('access_token') || '';
-    await notificationsApi.deleteAll(token).catch(() => {});
-    setItems([]); setTotalCount(0);
+    try {
+      if (pendingDelete === 'all') {
+        await notificationsApi.deleteAll(token).catch(() => {});
+        setItems([]);
+        setTotalCount(0);
+      } else {
+        const sid = pendingDelete.sid;
+        await notificationsApi.delete(sid, token).catch(() => {});
+        setItems((prev) => prev.filter((n) => n.sid !== sid));
+        setTotalCount((prev) => prev - 1);
+      }
+    } finally {
+      setDeleting(false);
+      setPendingDelete(null);
+    }
   };
 
   const totalPages = Math.ceil(totalCount / 20);
@@ -80,7 +92,7 @@ export default function DoctorNotificationsPage() {
           <Button variant="outline" size="sm" onClick={handleMarkAllRead}>
             <Check className="mr-1 h-4 w-4" /> Mark All Read
           </Button>
-          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={handleDeleteAll}>
+          <Button variant="outline" size="sm" className="text-destructive hover:text-destructive" onClick={() => setPendingDelete('all')}>
             <Trash2 className="mr-1 h-4 w-4" /> Delete All
           </Button>
         </div>
@@ -122,7 +134,7 @@ export default function DoctorNotificationsPage() {
                       <Check className="h-4 w-4" />
                     </Button>
                   )}
-                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => handleDelete(n.sid)}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => setPendingDelete({ sid: n.sid })}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -139,6 +151,18 @@ export default function DoctorNotificationsPage() {
           <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => { if (!open) setPendingDelete(null); }}
+        title={pendingDelete === 'all' ? t('confirmDeleteAllTitle') : t('confirmDeleteOneTitle')}
+        description={t('confirmDeleteMessage')}
+        confirmLabel={t('confirmDeleteButton')}
+        cancelLabel={t('confirmCancelButton')}
+        variant="destructive"
+        onConfirm={confirmPendingDelete}
+        loading={deleting}
+      />
     </div>
   );
 }

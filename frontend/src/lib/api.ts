@@ -292,20 +292,32 @@ export interface RescheduleAppointmentResponse {
   reschedule_count: number;
 }
 
+/**
+ * Bookable target for day/slot queries. Every caller must pass either a
+ * serviceSid (consultation) or a labTestSid (direct lab booking).
+ */
+type BookableQuery =
+  | { serviceSid: string; labTestSid?: undefined }
+  | { serviceSid?: undefined; labTestSid: string };
+
+function bookableQueryString(q: BookableQuery): string {
+  return q.serviceSid ? `service_sid=${q.serviceSid}` : `lab_test_sid=${q.labTestSid}`;
+}
+
 export const doctors = {
   schedule: (sid: string): Promise<DoctorScheduleEntry[]> =>
     fetchAPI(`/doctors/${sid}/schedule/`),
 
-  availableDays: (sid: string, month: string, serviceSid: string): Promise<DayInfo[]> =>
-    fetchAPI(`/doctors/${sid}/available-days/?month=${month}&service_sid=${serviceSid}`),
+  availableDays: (sid: string, month: string, q: BookableQuery): Promise<DayInfo[]> =>
+    fetchAPI(`/doctors/${sid}/available-days/?month=${month}&${bookableQueryString(q)}`),
 
   availableSlots: (
     sid: string,
     date: string,
-    serviceSid: string,
+    q: BookableQuery,
     init?: { signal?: AbortSignal },
   ): Promise<DayAvailability> =>
-    fetchAPI(`/doctors/${sid}/available-slots/?date=${date}&service_sid=${serviceSid}`, {
+    fetchAPI(`/doctors/${sid}/available-slots/?date=${date}&${bookableQueryString(q)}`, {
       signal: init?.signal,
     }),
 };
@@ -409,6 +421,7 @@ export interface MedicationCatalogItem {
   cost: string;
   requires_prescription: boolean;
   free_when_prescribed: boolean;
+  image: string | null;
 }
 
 export interface LabTestItem {
@@ -417,6 +430,40 @@ export interface LabTestItem {
   category: string;
   description: string;
   cost: string;
+  image: string | null;
+  duration_minutes: number;
+  requires_prescription: boolean;
+  free_when_prescribed: boolean;
+  /**
+   * True when the authenticated patient has an unclaimed prescription
+   * (`LabOrderItem`) for this lab. Annotated by `LabTestCatalogView`. Always
+   * `false` for anonymous requests or non-patients. Used by the UI to render
+   * the "Free for you" badge + crossed-out price.
+   */
+  has_active_prescription?: boolean;
+}
+
+/** A staff member listed inside `LabTestDetail.staff`. Same shape as `ServiceDoctor`. */
+export interface LabStaffItem {
+  sid: string;
+  full_name: string;
+  first_name: string;
+  first_last_name: string;
+  image: string | null;
+  specialization: string;
+  years_of_experience: number;
+}
+
+export interface LabTestDetail extends LabTestItem {
+  staff: LabStaffItem[];
+}
+
+export interface BookLabResponse {
+  appointment_sid: string;
+  amount: string;
+  status: string;
+  lab_test_name: string;
+  covered_by_prescription: boolean;
 }
 
 export interface PrescriptionItemPayload {
@@ -467,6 +514,33 @@ export const labTests = {
     fetchAPI(`/lab-tests/${search ? `?search=${encodeURIComponent(search)}` : ''}`, { token }),
 };
 
+/** Public (patient-facing) lab test catalog. */
+export const labTestsCatalog = {
+  /**
+   * Pass `token` so the response includes `has_active_prescription` per item
+   * (used by the catalog UI for the "Free for you" badge). Without a token the
+   * field comes back as `false` for every item.
+   */
+  list: (opts?: { search?: string; token?: string }): Promise<LabTestItem[]> =>
+    fetchAPI(
+      `/lab-tests-catalog/${opts?.search ? `?search=${encodeURIComponent(opts.search)}` : ''}`,
+      opts?.token ? { token: opts.token } : {},
+    ),
+
+  detail: (sid: string): Promise<LabTestDetail> =>
+    fetchAPI(`/lab-tests-catalog/${sid}/`),
+
+  book: (
+    payload: { lab_test_sid: string; staff_sid: string; date: string; branch_sid?: string },
+    token: string,
+  ): Promise<BookLabResponse> =>
+    fetchAPI('/lab-tests/book/', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+      token,
+    }),
+};
+
 export const branches = {
   list: (): Promise<BranchItem[]> =>
     fetchAPI('/branches/'),
@@ -510,9 +584,11 @@ export interface PatientPrescription {
 
 export interface PatientLabOrderItem {
   sid: string;
+  test_sid: string;
   test_name: string;
   test_category: string;
   notes: string;
+  is_claimed: boolean;
   has_result: boolean;
 }
 
@@ -545,6 +621,32 @@ export interface PatientMedicalRecordDetail {
   created_at: string;
 }
 
+/**
+ * Fetch a PDF endpoint and trigger a browser download. Used for prescription
+ * and lab-order PDFs (generated on-demand by the backend). Throws on non-200
+ * so callers can show a toast if the download fails.
+ */
+export async function downloadPdf(endpoint: string, filename: string, token: string): Promise<void> {
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Accept-Language': getLocale(),
+    },
+  });
+  if (!res.ok) {
+    throw { status: res.status, data: await res.json().catch(() => null) };
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export const patientMedicalRecords = {
   list: (token: string): Promise<PatientMedicalRecordListItem[]> =>
     fetchAPI('/patient/medical-records/', { token }).then(
@@ -561,6 +663,14 @@ export const patientLabOrders = {
       (data: { results?: PatientLabOrder[] } | PatientLabOrder[]) =>
         Array.isArray(data) ? data : (data.results ?? []),
     ),
+
+  downloadPdf: (sid: string, token: string): Promise<void> =>
+    downloadPdf(`/patient/lab-orders/${sid}/pdf/`, `lab-order-${sid.slice(0, 8).toUpperCase()}.pdf`, token),
+};
+
+export const patientPrescriptions = {
+  downloadPdf: (sid: string, token: string): Promise<void> =>
+    downloadPdf(`/patient/prescriptions/${sid}/pdf/`, `prescription-${sid.slice(0, 8).toUpperCase()}.pdf`, token),
 };
 
 // ---- Medicine shop (patient purchases) ----
@@ -570,6 +680,7 @@ export interface MedicineCatalogItem {
   name: string;
   generic_name: string;
   description: string;
+  image: string | null;
   category: string;
   dosage_form: string;
   strength: string;

@@ -9,6 +9,7 @@ import { doctors as doctorsApi, services as servicesApi, Service, DayAvailabilit
 import PatientDayTimeline from '@/components/booking/PatientDayTimeline';
 import BookingModal from '@/components/booking/BookingModal';
 import { useBfcacheRefetch } from '@/hooks/useBfcacheRefetch';
+import InitialsAvatar, { resolveImageUrl } from '@/components/InitialsAvatar';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -55,7 +56,7 @@ export default function DayBookingPage() {
     slotsAbortRef.current = controller;
 
     setDayLoading(true);
-    doctorsApi.availableSlots(doctorSid, date, serviceSid, { signal: controller.signal })
+    doctorsApi.availableSlots(doctorSid, date, { serviceSid }, { signal: controller.signal })
       .then((data) => { if (!controller.signal.aborted) setDayData(data); })
       .catch((err: unknown) => {
         const name = (err as { name?: string })?.name;
@@ -89,9 +90,7 @@ export default function DayBookingPage() {
     );
   }
 
-  const doctorImage = selectedDoctor.image
-    ? selectedDoctor.image.startsWith('http') ? selectedDoctor.image : `${API_BASE}${selectedDoctor.image}`
-    : null;
+  const doctorImage = resolveImageUrl(selectedDoctor.image, API_BASE);
 
   const summary = dayData?.summary;
   const occupancyPercent = summary?.occupancy_percent ?? 0;
@@ -123,15 +122,15 @@ export default function DayBookingPage() {
 
         {/* Doctor + Service Info */}
         <div className="mb-6 flex items-center gap-4 rounded-xl bg-white p-5 shadow-sm border border-gray-100">
-          {doctorImage ? (
-            <img src={doctorImage} alt={selectedDoctor.full_name} className="h-14 w-14 rounded-full object-cover" />
-          ) : (
-            <div className="flex h-14 w-14 items-center justify-center rounded-full bg-blue-100">
-              <svg className="h-7 w-7 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-              </svg>
-            </div>
-          )}
+          <InitialsAvatar
+            src={doctorImage}
+            name={selectedDoctor.full_name}
+            mode="person"
+            shape="circle"
+            variant="blue"
+            className="h-14 w-14"
+            textClassName="text-base"
+          />
           <div className="min-w-0 flex-1">
             <h2 className="font-semibold text-gray-900">Dr. {selectedDoctor.full_name}</h2>
             <p className="text-sm text-gray-500">{selectedDoctor.specialization}</p>
