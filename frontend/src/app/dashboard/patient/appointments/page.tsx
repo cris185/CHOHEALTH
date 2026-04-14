@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { appointments as appointmentsApi, AppointmentItem } from '@/lib/api';
+import { appointments as appointmentsApi, doctors as doctorsApi, AppointmentItem } from '@/lib/api';
 import { useBfcacheRefetch } from '@/hooks/useBfcacheRefetch';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -207,7 +207,28 @@ export default function PatientAppointmentsPage() {
                         <div className="flex justify-end gap-2">
                           <Button
                             size="sm"
-                            onClick={() => setPayTarget(a)}
+                            onClick={async () => {
+                              // Re-check the slot before opening the payment
+                              // modal so we fail fast if someone grabbed it
+                              // while this appointment sat Unpaid.
+                              if (a.doctor_sid && a.service_sid) {
+                                try {
+                                  const d = a.date.slice(0, 10);
+                                  const tm = new Date(a.date).toTimeString().slice(0, 5);
+                                  const slots = await doctorsApi.availableSlots(
+                                    a.doctor_sid, d, { serviceSid: a.service_sid },
+                                  );
+                                  const target = slots.slots.find((s) => s.time === tm);
+                                  if (!target || !target.available) {
+                                    setToast({ kind: 'error', text: t('booking.slotTaken') });
+                                    return;
+                                  }
+                                } catch {
+                                  // Let the server have the final say on failures.
+                                }
+                              }
+                              setPayTarget(a);
+                            }}
                             className="bg-primary text-primary-foreground hover:bg-primary/90"
                           >
                             Pay Now
@@ -233,6 +254,16 @@ export default function PatientAppointmentsPage() {
                         </div>
                       ) : canCancelWithRefund(a) ? (
                         <div className="flex justify-end gap-2">
+                          {a.mode === 'Virtual' && a.status === 'In Progress' && a.meeting_link && (
+                            <a
+                              href={a.meeting_link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700"
+                            >
+                              {t('booking.joinMeeting')}
+                            </a>
+                          )}
                           <Button
                             size="sm"
                             variant="outline"
@@ -249,6 +280,17 @@ export default function PatientAppointmentsPage() {
                           >
                             Cancel
                           </Button>
+                        </div>
+                      ) : a.mode === 'Virtual' && a.status === 'In Progress' && a.meeting_link ? (
+                        <div className="flex justify-end">
+                          <a
+                            href={a.meeting_link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex h-9 items-center rounded-md bg-blue-600 px-3 text-xs font-semibold text-white hover:bg-blue-700"
+                          >
+                            {t('booking.joinMeeting')}
+                          </a>
                         </div>
                       ) : (
                         <span className="text-xs text-muted-foreground">—</span>

@@ -10,6 +10,7 @@ from .payment_views import (
     PayPalCreateOrderView, PayPalCaptureOrderView,
     CancelPendingPaymentView,
     MedicineOrderStripeCheckoutView, MedicineOrderStripeVerifyView,
+    MedicineOrderStripeSavedCardPayView,
     MedicineOrderPayPalCreateView, MedicineOrderPayPalCaptureView,
 )
 from .payment_methods_views import (
@@ -37,6 +38,7 @@ urlpatterns = [
     # which branches on metadata.kind == 'medicine_order')
     path('payments/medicine-order/stripe/checkout/', MedicineOrderStripeCheckoutView.as_view(), name='medicine-order-stripe-checkout'),
     path('payments/medicine-order/stripe/verify/', MedicineOrderStripeVerifyView.as_view(), name='medicine-order-stripe-verify'),
+    path('payments/medicine-order/stripe/saved-card/', MedicineOrderStripeSavedCardPayView.as_view(), name='medicine-order-stripe-saved-card-pay'),
     path('payments/medicine-order/paypal/create-order/', MedicineOrderPayPalCreateView.as_view(), name='medicine-order-paypal-create'),
     path('payments/medicine-order/paypal/capture-order/', MedicineOrderPayPalCaptureView.as_view(), name='medicine-order-paypal-capture'),
 

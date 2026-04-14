@@ -1,5 +1,6 @@
 import shortuuid
 from django.db import models
+from django.db.models import Q
 from django.core.exceptions import ValidationError
 from doctor.models import Doctor
 from patient.models import Patient
@@ -123,6 +124,16 @@ class Appointment(models.Model):
 
     class Meta:
         ordering = ['-date']
+        constraints = [
+            # Last line of defense against a race condition where two patients
+            # manage to pay for the same doctor+datetime slot near-simultaneously.
+            # Only blocking statuses count — Unpaid and Cancelled must coexist.
+            models.UniqueConstraint(
+                fields=['doctor', 'date'],
+                condition=Q(status__in=['Confirmed', 'In Progress', 'Completed', 'No Show']),
+                name='unique_doctor_booked_slot',
+            ),
+        ]
 
     def clean(self):
         if self.mode == 'Virtual':
@@ -444,8 +455,22 @@ class MedicineOrder(models.Model):
     delivery_address = models.CharField(max_length=300, blank=True)
     status = models.CharField(max_length=20, choices=MEDICINE_ORDER_STATUS, default='Pending Payment')
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    # Flat shipping fee. Non-zero only when a doctor's prescription is being
+    # shipped (medicines are already free, so the patient only covers delivery).
+    # Direct cart purchases are shipped free — the medicine price already covers it.
+    shipping_fee = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     total = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     notes = models.TextField(blank=True)
+    # For prescription-driven delivery orders: the source prescription that
+    # generated this bundle. Lets us mark the Rx items as claimed when the
+    # delivery completes without duplicating the logic the pickup flow uses.
+    source_prescription = models.ForeignKey(
+        'Prescription',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='delivery_orders',
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     # Short human-friendly code that the patient shows at the branch to claim
@@ -494,3 +519,47 @@ class MedicineOrderItem(models.Model):
 
     def __str__(self):
         return f'{self.medication.name} x{self.quantity}'
+
+
+# ============================================================================
+# Medicine Delivery (tracking record, 1:1 with MedicineOrder)
+# ============================================================================
+
+DELIVERY_STAGE_CHOICES = (
+    ('picked_up', 'Picked up from origin'),
+    ('left_origin', 'Left the branch'),
+    ('on_the_way', 'On the way'),
+    ('arriving_soon', 'Arriving soon'),
+    ('delivered', 'Delivered'),
+)
+
+# Seconds between stage transitions. Kept small so the demo feels responsive:
+# a full delivery lifecycle takes ~2 minutes from payment to "Delivered".
+# The stages advance automatically inside the tracking polling endpoint based
+# on elapsed time — no cron or background worker needed.
+DELIVERY_STAGE_SECONDS = 30
+
+
+class MedicineDelivery(models.Model):
+    sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
+    order = models.OneToOneField(
+        MedicineOrder, on_delete=models.CASCADE, related_name='delivery',
+    )
+    origin_branch = models.ForeignKey(
+        Branch, on_delete=models.SET_NULL, null=True, related_name='deliveries',
+    )
+    address = models.CharField(max_length=300)
+    stage = models.CharField(max_length=20, choices=DELIVERY_STAGE_CHOICES, default='picked_up')
+    # Set the first time the tracking endpoint is polled after payment (or
+    # at the moment of payment success, whichever comes first). We compute the
+    # active stage from `now() - started_at`.
+    started_at = models.DateTimeField(null=True, blank=True)
+    delivered_at = models.DateTimeField(null=True, blank=True)
+    delivered_email_sent = models.BooleanField(default=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'Delivery {self.sid[:6]} — {self.stage}'

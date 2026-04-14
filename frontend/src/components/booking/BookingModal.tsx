@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
-import { paymentFlow, branches as branchesApi, BranchItem, CreateAppointmentResponse } from '@/lib/api';
+import { paymentFlow, branches as branchesApi, doctors as doctorsApi, BranchItem, CreateAppointmentResponse } from '@/lib/api';
 import PaymentModal from './PaymentModal';
 
 interface BookingModalProps {
@@ -72,6 +72,21 @@ export default function BookingModal({
 
     const token = localStorage.getItem('access_token');
     if (!token) { setError('Not authenticated.'); setLoading(false); return; }
+
+    // Re-verify the slot is still free before creating the Unpaid appointment.
+    // Server re-validates too — this is just to give fast UX feedback if a
+    // concurrent patient grabbed the slot while this form was open.
+    try {
+      const slotCheck = await doctorsApi.availableSlots(doctorSid, date, { serviceSid });
+      const target = slotCheck.slots.find((s) => s.time === time);
+      if (!target || !target.available) {
+        setError(t('booking.slotTaken'));
+        setLoading(false);
+        return;
+      }
+    } catch {
+      // If the check itself fails, let the server have the final say.
+    }
 
     try {
       const res = await paymentFlow.createAppointment({
@@ -184,6 +199,7 @@ export default function BookingModal({
             <div>
               <label htmlFor="branch" className="block text-sm font-medium text-gray-700">{t('booking.branch')}</label>
               <select id="branch" value={branchSid} onChange={(e) => setBranchSid(e.target.value)}
+                required
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                 <option value="">{t('booking.selectBranch')}</option>
                 {branchesList.map((b) => (

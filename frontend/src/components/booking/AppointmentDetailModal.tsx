@@ -50,6 +50,9 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
   const [cancelOpen, setCancelOpen] = useState(false);
   const [rescheduleOpen, setRescheduleOpen] = useState(false);
   const [completeOpen, setCompleteOpen] = useState(false);
+  const [startVirtualOpen, setStartVirtualOpen] = useState(false);
+  const [meetingLink, setMeetingLink] = useState('');
+  const [meetingProvider, setMeetingProvider] = useState('');
   const [actionError, setActionError] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
 
@@ -88,22 +91,52 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
     refetchDetail();
   };
 
-  const changeStatus = async (newStatus: 'In Progress' | 'No Show') => {
+  const changeStatus = async (
+    newStatus: 'In Progress' | 'No Show',
+    extra?: { meeting_link?: string; meeting_provider?: string },
+  ) => {
     if (!detail) return;
     setActionError('');
     setActionBusy(true);
     try {
       const token = localStorage.getItem('access_token') || '';
-      await appointmentsApi.doctorStatus(detail.sid, newStatus, token);
+      await appointmentsApi.doctorStatus(detail.sid, newStatus, token, extra);
       onAppointmentChanged?.();
       // Keep the modal open so the doctor sees the new state and can keep working.
       refetchDetail();
+      return true;
     } catch (err: unknown) {
-      const apiError = err as { data?: { detail?: string } };
-      setActionError(apiError?.data?.detail || tActions('statusChangeFailed'));
+      const apiError = err as { data?: { detail?: string; meeting_link?: string[] } };
+      const linkErr = apiError?.data?.meeting_link?.[0];
+      setActionError(linkErr || apiError?.data?.detail || tActions('statusChangeFailed'));
+      return false;
     } finally {
       setActionBusy(false);
     }
+  };
+
+  const handleStartConsultation = () => {
+    if (!detail) return;
+    if (detail.mode === 'Virtual') {
+      setMeetingLink('');
+      setMeetingProvider('');
+      setActionError('');
+      setStartVirtualOpen(true);
+    } else {
+      changeStatus('In Progress');
+    }
+  };
+
+  const handleConfirmStartVirtual = async () => {
+    if (!meetingLink.trim()) {
+      setActionError(tActions('meetingLinkRequired'));
+      return;
+    }
+    const ok = await changeStatus('In Progress', {
+      meeting_link: meetingLink.trim(),
+      meeting_provider: meetingProvider.trim(),
+    });
+    if (ok) setStartVirtualOpen(false);
   };
 
   const handleCompleted = () => {
@@ -224,6 +257,25 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
               )}
             </div>
 
+            {detail.mode === 'Virtual' && detail.meeting_link && (
+              <a
+                href={detail.meeting_link}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-between rounded-lg border border-blue-200 bg-blue-50 p-3 transition hover:bg-blue-100"
+              >
+                <div className="min-w-0">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-blue-600">
+                    {tActions('virtualMeetingLink')}
+                  </p>
+                  <p className="truncate text-xs text-blue-700">{detail.meeting_link}</p>
+                </div>
+                <span className="ml-3 shrink-0 rounded-md bg-blue-600 px-3 py-1 text-xs font-semibold text-white">
+                  {tActions('join')}
+                </span>
+              </a>
+            )}
+
             {/* Issues / Symptoms / Notes */}
             {(detail.issues || detail.symptoms || detail.notes) && (
               <div className="space-y-2 rounded-lg bg-gray-50 p-3 text-sm">
@@ -258,7 +310,7 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
           {/* Status-driven primary actions */}
           {canStart && (
             <button
-              onClick={() => changeStatus('In Progress')}
+              onClick={handleStartConsultation}
               disabled={actionBusy}
               className="w-full rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
             >
@@ -349,6 +401,62 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
           appointmentDate={detail.date}
           onCompleted={handleCompleted}
         />
+      )}
+
+      {detail && startVirtualOpen && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/60 p-4">
+          <div className="w-full max-w-md rounded-lg bg-white shadow-xl">
+            <div className="border-b p-4">
+              <h3 className="text-base font-bold text-gray-900">{tActions('startVirtualTitle')}</h3>
+              <p className="mt-1 text-xs text-gray-500">{tActions('startVirtualHint')}</p>
+            </div>
+            <div className="space-y-3 p-4">
+              {actionError && (
+                <div className="rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{actionError}</div>
+              )}
+              <div>
+                <label className="block text-xs font-medium text-gray-700">{tActions('meetingLinkLabel')}</label>
+                <input
+                  type="url"
+                  value={meetingLink}
+                  onChange={(e) => setMeetingLink(e.target.value)}
+                  placeholder="https://meet.google.com/..."
+                  disabled={actionBusy}
+                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-700">{tActions('meetingProviderLabel')}</label>
+                <input
+                  type="text"
+                  value={meetingProvider}
+                  onChange={(e) => setMeetingProvider(e.target.value)}
+                  placeholder="Zoom, Google Meet, Teams..."
+                  disabled={actionBusy}
+                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2 border-t bg-gray-50 px-4 py-3">
+              <button
+                type="button"
+                onClick={() => setStartVirtualOpen(false)}
+                disabled={actionBusy}
+                className="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+              >
+                {tActions('cancel')}
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmStartVirtual}
+                disabled={actionBusy || !meetingLink.trim()}
+                className="flex-1 rounded-md bg-emerald-600 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {actionBusy ? tActions('startingConsultation') : tActions('startAndNotify')}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

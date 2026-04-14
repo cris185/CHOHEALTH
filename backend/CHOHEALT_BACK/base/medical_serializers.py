@@ -122,6 +122,10 @@ class LabOrderCreateSerializer(serializers.Serializer):
 
 class AppointmentStatusUpdateSerializer(serializers.Serializer):
     status = serializers.ChoiceField(choices=['In Progress', 'Completed', 'Cancelled', 'No Show'])
+    # Only relevant when starting a virtual consultation. Required in that case
+    # (see `validate`). Ignored for In-Person appointments.
+    meeting_link = serializers.URLField(required=False, allow_blank=True, default='')
+    meeting_provider = serializers.CharField(required=False, allow_blank=True, default='', max_length=50)
 
     VALID_TRANSITIONS = {
         'Confirmed': ['In Progress', 'Completed', 'Cancelled', 'No Show'],
@@ -130,10 +134,15 @@ class AppointmentStatusUpdateSerializer(serializers.Serializer):
 
     def validate(self, data):
         current_status = self.context.get('current_status')
+        mode = self.context.get('mode')
         new_status = data['status']
         valid = self.VALID_TRANSITIONS.get(current_status, [])
         if new_status not in valid:
             raise serializers.ValidationError({'status': f'Cannot transition from "{current_status}" to "{new_status}".'})
+        # Virtual appointments can only start if the doctor supplied a meeting
+        # link — the patient has no other way to join.
+        if new_status == 'In Progress' and mode == 'Virtual' and not data.get('meeting_link'):
+            raise serializers.ValidationError({'meeting_link': 'A meeting link is required to start a virtual consultation.'})
         return data
 
 

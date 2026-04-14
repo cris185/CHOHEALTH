@@ -403,11 +403,32 @@ def send_appointment_rescheduled_email(appointment, old_date, rescheduled_by: st
     )
 
 
-def send_medicine_order_pickup_email(order, qr_png_bytes: bytes):
+def _medicine_invoice_pdf_attachment(invoice):
+    """Generate the invoice PDF and wrap it as a SendGrid attachment.
+
+    Returns None if generation fails — the caller should still send the email
+    without the attachment instead of blocking the whole flow.
+    """
+    try:
+        pdf_bytes = generate_invoice_pdf(invoice)
+        att = Attachment()
+        att.file_content = FileContent(base64.b64encode(pdf_bytes).decode())
+        att.file_name = FileName(f'Invoice-{invoice.invoice_number}.pdf')
+        att.file_type = FileType('application/pdf')
+        att.disposition = Disposition('attachment')
+        return att
+    except Exception as e:
+        logger.error(f'Failed to build medicine invoice PDF: {e}')
+        return None
+
+
+def send_medicine_order_pickup_email(order, qr_png_bytes: bytes, invoice=None):
     """Send the patient their pickup code and QR for a paid medicine order.
 
     The QR encodes the same `pickup_code` that the patient also sees in plain
     text — staff can either scan or type it at the branch. Fire-and-forget.
+    When an `invoice` is provided, the PDF is attached so the patient also has
+    a receipt for the purchase.
     """
     patient = order.patient
     code = order.pickup_code or ''
@@ -478,11 +499,255 @@ def send_medicine_order_pickup_email(order, qr_png_bytes: bytes):
     qr_attachment.disposition = Disposition('inline')
     qr_attachment.content_id = ContentId('pickup_qr')
 
-    attachments = [a for a in [_logo_attachment(), qr_attachment] if a]
+    invoice_attachment = _medicine_invoice_pdf_attachment(invoice) if invoice else None
+    attachments = [a for a in [_logo_attachment(), qr_attachment, invoice_attachment] if a]
+
+    subject = (
+        f'CHO Health - Pickup code {code} & Invoice #{invoice.invoice_number}'
+        if invoice else
+        f'CHO Health - Your pickup code {code}'
+    )
+    send_email(
+        to_email=patient.user.email,
+        subject=subject,
+        html_content=html,
+        attachments=attachments,
+    )
+
+
+def send_medicine_order_shipped_email(order, invoice):
+    """Send the patient a shipping confirmation with the invoice PDF attached.
+
+    Fires once a delivery-mode medicine order is paid — the patient gets the
+    receipt plus a link back to the live tracking page. A second email is
+    sent later (`send_medicine_delivery_completed_email`) when the courier
+    actually hands the package over.
+    """
+    from django.conf import settings
+
+    patient = order.patient
+    address = order.delivery_address or ''
+    branch_name = order.delivery_branch.name if order.delivery_branch else 'our warehouse'
+    tracking_url = f'{settings.FRONTEND_URL}/dashboard/patient/delivery/{order.sid}'
+
+    items_rows = ''
+    for item in order.items.select_related('medication').all():
+        strength = f' {item.medication.strength}' if item.medication.strength else ''
+        line_total = f'${item.total:.2f}' if (item.unit_price or 0) > 0 else 'Covered'
+        items_rows += f'''
+            <tr>
+                <td style="color: #1e293b; padding: 6px 0; font-size: 14px;">
+                    {item.medication.name}{strength} &times;{item.quantity}
+                </td>
+                <td style="color: #64748b; padding: 6px 0; font-size: 14px; text-align: right;">{line_total}</td>
+            </tr>
+        '''
+
+    shipping_row = ''
+    if order.shipping_fee and order.shipping_fee > 0:
+        shipping_row = f'''
+            <tr>
+                <td style="color: #1e293b; padding: 6px 0; font-size: 14px;">Shipping fee</td>
+                <td style="color: #64748b; padding: 6px 0; font-size: 14px; text-align: right;">${order.shipping_fee:.2f}</td>
+            </tr>
+        '''
+
+    html = f'''
+    <div style="font-family: Inter, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+            <img src="cid:logo" alt="CHO Health" style="height: 120px; width: auto; margin-bottom: 8px;" />
+        </div>
+
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #1d4ed8; font-size: 14px; font-weight: 600; margin: 0;">
+                Your medicine order is on its way
+            </p>
+        </div>
+
+        <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
+            Hi <strong>{patient.full_name}</strong>, we received your payment and our courier is
+            picking up your order from <strong>{branch_name}</strong>. We'll send another email
+            as soon as it reaches your address.
+        </p>
+
+        <div style="text-align: center; margin: 28px 0;">
+            <a href="{tracking_url}" style="background: #2563eb; color: #ffffff; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-size: 14px; font-weight: 600; display: inline-block;">
+                Track your order
+            </a>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <p style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px;">
+                Delivering to
+            </p>
+            <p style="color: #0f172a; font-size: 14px; margin: 0;">{address}</p>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <p style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px;">Items</p>
+            <table style="width: 100%; border-collapse: collapse;">
+                {items_rows}
+                {shipping_row}
+                <tr>
+                    <td style="color: #0f172a; padding: 12px 0 0; font-size: 14px; font-weight: 700; border-top: 1px solid #e2e8f0;">Total paid</td>
+                    <td style="color: #166534; padding: 12px 0 0; font-size: 16px; text-align: right; font-weight: 700; border-top: 1px solid #e2e8f0;">${order.total:.2f}</td>
+                </tr>
+            </table>
+        </div>
+
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; line-height: 1.5;">
+            Your invoice is attached to this email as a PDF.
+        </p>
+
+        <p style="color: #cbd5e1; font-size: 11px; text-align: center; margin-top: 24px;">
+            &copy; {__import__("datetime").datetime.now().year} CHO Health. All rights reserved.
+        </p>
+    </div>
+    '''
+
+    invoice_attachment = _medicine_invoice_pdf_attachment(invoice) if invoice else None
+    attachments = [a for a in [_logo_attachment(), invoice_attachment] if a]
+
+    subject = (
+        f'CHO Health - Your order is on its way - Invoice #{invoice.invoice_number}'
+        if invoice else
+        'CHO Health - Your order is on its way'
+    )
+    send_email(
+        to_email=patient.user.email,
+        subject=subject,
+        html_content=html,
+        attachments=attachments,
+    )
+
+
+def send_virtual_appointment_started_email(appointment):
+    """Send the patient the meeting link for a virtual consultation the moment
+    the doctor switches the appointment to 'In Progress'. Fire-and-forget.
+    """
+    patient = appointment.patient
+    doctor = appointment.doctor
+    link = appointment.meeting_link
+    provider = appointment.meeting_provider or 'video call'
+
+    doctor_name = f'Dr. {doctor.first_name} {doctor.first_last_name}' if doctor else 'Your doctor'
+    service_name = appointment.service.name if appointment.service else 'consultation'
+    when = appointment.date.strftime('%b %d, %Y at %I:%M %p')
+
+    html = f'''
+    <div style="font-family: Inter, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+            <img src="cid:logo" alt="CHO Health" style="height: 120px; width: auto; margin-bottom: 8px;" />
+        </div>
+
+        <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #1d4ed8; font-size: 14px; font-weight: 600; margin: 0;">
+                Your virtual consultation is ready
+            </p>
+        </div>
+
+        <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
+            Hi <strong>{patient.full_name}</strong>, <strong>{doctor_name}</strong> has just started your
+            {service_name} scheduled for {when}. Click the button below to join the meeting.
+        </p>
+
+        <div style="text-align: center; margin: 32px 0;">
+            <a href="{link}" style="background: #2563eb; color: #ffffff; text-decoration: none; padding: 14px 32px; border-radius: 8px; font-size: 15px; font-weight: 600; display: inline-block;">
+                Join the consultation
+            </a>
+        </div>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+            <p style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px;">
+                Meeting link
+            </p>
+            <p style="color: #0f172a; font-size: 13px; word-break: break-all; margin: 0;">
+                <a href="{link}" style="color: #2563eb; text-decoration: none;">{link}</a>
+            </p>
+            <p style="color: #94a3b8; font-size: 11px; margin: 12px 0 0;">Platform: {provider}</p>
+        </div>
+
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; line-height: 1.5;">
+            Make sure your microphone and camera are working before joining.
+        </p>
+
+        <p style="color: #cbd5e1; font-size: 11px; text-align: center; margin-top: 24px;">
+            &copy; {__import__("datetime").datetime.now().year} CHO Health. All rights reserved.
+        </p>
+    </div>
+    '''
+
+    attachments = [a for a in [_logo_attachment()] if a]
 
     send_email(
         to_email=patient.user.email,
-        subject=f'CHO Health - Your pickup code {code}',
+        subject='CHO Health - Your virtual consultation is ready',
+        html_content=html,
+        attachments=attachments,
+    )
+
+
+def send_medicine_delivery_completed_email(order):
+    """Email the patient once the courier marks a delivery order as
+    Delivered. Lists the medications delivered and the destination address
+    the patient provided at checkout. Fire-and-forget.
+    """
+    patient = order.patient
+    delivery = getattr(order, 'delivery', None)
+    address = delivery.address if delivery else order.delivery_address
+
+    items_rows = ''
+    for item in order.items.select_related('medication').all():
+        strength = f' {item.medication.strength}' if item.medication.strength else ''
+        items_rows += f'''
+            <tr>
+                <td style="color: #1e293b; padding: 6px 0; font-size: 14px;">
+                    {item.medication.name}{strength} &times;{item.quantity}
+                </td>
+            </tr>
+        '''
+
+    html = f'''
+    <div style="font-family: Inter, -apple-system, sans-serif; max-width: 560px; margin: 0 auto; padding: 40px 20px;">
+        <div style="text-align: center; margin-bottom: 32px;">
+            <img src="cid:logo" alt="CHO Health" style="height: 120px; width: auto; margin-bottom: 8px;" />
+        </div>
+
+        <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 12px; padding: 16px; text-align: center; margin-bottom: 24px;">
+            <p style="color: #166534; font-size: 14px; font-weight: 600; margin: 0;">
+                ✓ Your medicine order has been delivered
+            </p>
+        </div>
+
+        <p style="color: #475569; font-size: 14px; line-height: 1.6; margin-bottom: 24px;">
+            Hi <strong>{patient.full_name}</strong>, our courier just dropped off your medicines at
+            <strong>{address}</strong>. We hope you feel better soon!
+        </p>
+
+        <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 20px; margin-bottom: 24px;">
+            <p style="color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 8px;">
+                Delivered items
+            </p>
+            <table style="width: 100%; border-collapse: collapse;">
+                {items_rows}
+            </table>
+        </div>
+
+        <p style="color: #94a3b8; font-size: 12px; text-align: center; line-height: 1.5;">
+            If you didn't receive this order, reply to this email and we'll look into it right away.
+        </p>
+
+        <p style="color: #cbd5e1; font-size: 11px; text-align: center; margin-top: 24px;">
+            &copy; {__import__("datetime").datetime.now().year} CHO Health. All rights reserved.
+        </p>
+    </div>
+    '''
+
+    attachments = [a for a in [_logo_attachment()] if a]
+
+    send_email(
+        to_email=patient.user.email,
+        subject='CHO Health - Your medicines have been delivered',
         html_content=html,
         attachments=attachments,
     )

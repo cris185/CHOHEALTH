@@ -7,7 +7,7 @@ import { useAuth } from '@/context/AuthContext';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
-import { Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Pill, TestTubes } from 'lucide-react';
+import { Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Pill, TestTubes, Truck } from 'lucide-react';
 
 const mainNav = [
   { key: 'dashboard', href: '/dashboard/patient', icon: Home, exact: true },
@@ -18,6 +18,7 @@ const mainNav = [
 const healthNav = [
   { key: 'medicine', href: '/dashboard/patient/medicine', icon: Pill },
   { key: 'labs', href: '/dashboard/patient/labs', icon: TestTubes },
+  { key: 'deliveries', href: '/dashboard/patient/deliveries', icon: Truck },
 ];
 
 const activityNav = [

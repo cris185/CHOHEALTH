@@ -52,9 +52,22 @@ class PatientPaymentListView(generics.ListAPIView):
     permission_classes = [IsPatient]
 
     def get_queryset(self):
-        return Payment.objects.filter(
-            invoice__patient=self.request.user.patient
-        ).select_related('invoice', 'invoice__appointment', 'invoice__appointment__doctor', 'invoice__appointment__service').order_by('-created_at')
+        return (
+            Payment.objects
+            .filter(invoice__patient=self.request.user.patient)
+            .select_related(
+                'invoice',
+                'invoice__appointment', 'invoice__appointment__doctor',
+                'invoice__appointment__service', 'invoice__appointment__lab_test',
+                'invoice__medicine_order',
+                'invoice__medicine_order__source_prescription__medical_record__doctor',
+            )
+            .prefetch_related(
+                'invoice__medicine_order__items__medication',
+                'invoice__medicine_order__items__source_prescription_item__prescription__medical_record__doctor',
+            )
+            .order_by('-created_at')
+        )
 
 
 class PatientPaymentStatsView(APIView):

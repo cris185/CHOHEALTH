@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
-import { medicineOrderPaymentFlow } from '@/lib/api';
+import { medicineOrderPaymentFlow, medicineOrders } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
@@ -16,6 +16,7 @@ import { CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
  */
 export default function MedicinePaymentSuccessPage() {
   const t = useTranslations('dashboard.patient.medicinePaymentPages');
+  const router = useRouter();
   const searchParams = useSearchParams();
   const orderSid = searchParams.get('order');
   const sessionId = searchParams.get('session_id');
@@ -30,25 +31,49 @@ export default function MedicinePaymentSuccessPage() {
     }
     const token = localStorage.getItem('access_token') || '';
 
-    if (sessionId) {
-      medicineOrderPaymentFlow
-        .stripeVerify(orderSid, sessionId, token)
-        .then(() => setVerified(true))
-        .catch((err: unknown) => {
+    // After verifying the payment, check the delivery method. Delivery orders
+    // get pushed straight to the tracking page (the user cares about the
+    // courier progress, not a generic "payment successful" screen). Pickup
+    // orders stay on this page so the patient sees the QR/pickup code flow.
+    const routeAfterVerify = async () => {
+      try {
+        const detail = await medicineOrders.detail(orderSid, token);
+        if (detail.delivery_method === 'delivery') {
+          router.replace(`/dashboard/patient/delivery/${orderSid}`);
+          return true;
+        }
+      } catch {
+        // Fall through to the normal success card.
+      }
+      return false;
+    };
+
+    const run = async () => {
+      if (sessionId) {
+        try {
+          await medicineOrderPaymentFlow.stripeVerify(orderSid, sessionId, token);
+          const redirected = await routeAfterVerify();
+          if (!redirected) { setVerified(true); setVerifying(false); }
+        } catch (err: unknown) {
           const apiError = err as { data?: { detail?: string; status?: string } };
-          // If the backend reports the order is already Paid, treat as success.
-          if (apiError?.data?.status === 'Paid') setVerified(true);
-          else setError(apiError?.data?.detail || t('verifyError'));
-        })
-        .finally(() => setVerifying(false));
-    } else {
-      // No session id? The webhook probably completed the payment already —
-      // optimistically show success; if the user's order is still pending the
-      // "My orders" tab will still show "Pending Payment" so they can retry.
-      setVerified(true);
-      setVerifying(false);
-    }
-  }, [orderSid, sessionId, t]);
+          if (apiError?.data?.status === 'Paid') {
+            const redirected = await routeAfterVerify();
+            if (!redirected) { setVerified(true); setVerifying(false); }
+          } else {
+            setError(apiError?.data?.detail || t('verifyError'));
+            setVerifying(false);
+          }
+        }
+      } else {
+        // No session_id: webhook probably completed first. Still peek at the
+        // order to route delivery ones to tracking.
+        const redirected = await routeAfterVerify();
+        if (!redirected) { setVerified(true); setVerifying(false); }
+      }
+    };
+
+    run();
+  }, [orderSid, sessionId, t, router]);
 
   if (verifying) {
     return (

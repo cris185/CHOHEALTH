@@ -23,10 +23,9 @@ interface PaymentModalProps {
   /**
    * Discriminated union describing what we are charging for:
    *  - `{ kind: 'appointment', appointmentSid }` — the classic booking flow.
-   *  - `{ kind: 'medicine_order', orderSid }` — the medicine shop flow (Paso 4).
+   *  - `{ kind: 'medicine_order', orderSid }` — the medicine shop flow.
    *
-   * The saved-card (one-click) flow is only supported for appointments — for
-   * medicine orders the modal shows Stripe Checkout + PayPal redirect only.
+   * Both kinds support saved-card one-click payments.
    */
   target: PaymentTarget;
   amount: string;
@@ -64,26 +63,22 @@ export default function PaymentModal({
       // vuelve con el botón atrás del navegador desde Stripe/PayPal.
       setLoading(false);
       setError('');
-      // Saved cards are only meaningful for the appointment flow. For
-      // medicine-order payments we skip the list call and render Stripe/PayPal
-      // directly without the "one-click" section.
-      if (isAppointment) {
-        const token = localStorage.getItem('access_token') || '';
-        paymentMethods.listCards(token)
-          .then((cards) => {
-            const sorted = [...cards].sort((a, b) => Number(b.is_default) - Number(a.is_default));
-            setSavedCards(sorted);
-          })
-          .catch(() => setSavedCards([]));
-      } else {
-        setSavedCards([]);
-      }
+      // Saved cards work for both flows now. The backend has a dedicated
+      // saved-card endpoint per target kind; the modal picks which to call
+      // inside `handleSavedCardPay`.
+      const token = localStorage.getItem('access_token') || '';
+      paymentMethods.listCards(token)
+        .then((cards) => {
+          const sorted = [...cards].sort((a, b) => Number(b.is_default) - Number(a.is_default));
+          setSavedCards(sorted);
+        })
+        .catch(() => setSavedCards([]));
     } else {
       setSelectedOtherCard('');
       setSaveCard(false);
       setError('');
     }
-  }, [isOpen, isAppointment]);
+  }, [isOpen]);
 
   // Si el navegador restaura esta página desde el bfcache mientras el modal
   // estaba abierto en estado "Redirecting to payment…", reseteamos `loading`
@@ -118,17 +113,24 @@ export default function PaymentModal({
   };
 
   const handleSavedCardPay = async (paymentMethodId: string) => {
-    // Saved-card one-click is only supported for appointments for now.
-    if (target.kind !== 'appointment') return;
     setLoading(true);
     setError('');
     try {
       const token = localStorage.getItem('access_token') || '';
-      await paymentFlow.stripeSavedCardPay(target.appointmentSid, paymentMethodId, token);
-      if (onSuccess) {
-        onSuccess();
+      if (target.kind === 'appointment') {
+        await paymentFlow.stripeSavedCardPay(target.appointmentSid, paymentMethodId, token);
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          router.push(`/dashboard/patient/booking/success?appointment=${target.appointmentSid}`);
+        }
       } else {
-        router.push(`/dashboard/patient/booking/success?appointment=${target.appointmentSid}`);
+        await medicineOrderPaymentFlow.stripeSavedCardPay(target.orderSid, paymentMethodId, token);
+        if (onSuccess) {
+          onSuccess();
+        } else {
+          router.push(`/dashboard/patient/medicine/payment/success?order=${target.orderSid}`);
+        }
       }
     } catch (err: unknown) {
       const apiError = err as { data?: { detail?: string } };

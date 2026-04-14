@@ -1,7 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { doctors as doctorsApi, DayInfo, DayAvailability } from '@/lib/api';
+import MonthCalendar from './MonthCalendar';
 
 interface RescheduleModalProps {
   isOpen: boolean;
@@ -16,33 +18,33 @@ interface RescheduleModalProps {
 
 /**
  * Reusable modal to pick a new date + time for an existing appointment.
- * Calls the existing /doctors/<sid>/available-days and /available-slots endpoints.
- * `onReschedule` is the function the caller uses to hit their own endpoint (patient or doctor).
+ * Shares `MonthCalendar` with the booking flow so the UX matches between
+ * "book a service" and "reschedule".
  */
 export default function RescheduleModal({
   isOpen, onClose, appointmentSid, doctorSid, serviceSid, currentDate, onReschedule, title,
 }: RescheduleModalProps) {
-  const [monthOffset, setMonthOffset] = useState(0);
+  const t = useTranslations();
+  const now = new Date();
+  const [calYear, setCalYear] = useState(now.getFullYear());
+  const [calMonth, setCalMonth] = useState(now.getMonth());
   const [days, setDays] = useState<DayInfo[]>([]);
-  const [selectedDate, setSelectedDate] = useState<string>('');
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [daySlots, setDaySlots] = useState<DayAvailability | null>(null);
   const [selectedTime, setSelectedTime] = useState<string>('');
-  const [loading, setLoading] = useState(false);
+  const [calLoading, setCalLoading] = useState(false);
+  const [slotsLoading, setSlotsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
-
-  const currentMonth = useMemo(() => {
-    const d = new Date();
-    d.setMonth(d.getMonth() + monthOffset);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  }, [monthOffset]);
 
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
-      setMonthOffset(0);
+      const today = new Date();
+      setCalYear(today.getFullYear());
+      setCalMonth(today.getMonth());
       setDays([]);
-      setSelectedDate('');
+      setSelectedDate(null);
       setDaySlots(null);
       setSelectedTime('');
       setError('');
@@ -52,13 +54,14 @@ export default function RescheduleModal({
   // Load available days when modal opens or month changes
   useEffect(() => {
     if (!isOpen || !doctorSid || !serviceSid) return;
-    setLoading(true);
+    setCalLoading(true);
     setError('');
-    doctorsApi.availableDays(doctorSid, currentMonth, { serviceSid })
+    const monthStr = `${calYear}-${String(calMonth + 1).padStart(2, '0')}`;
+    doctorsApi.availableDays(doctorSid, monthStr, { serviceSid })
       .then(setDays)
       .catch(() => setDays([]))
-      .finally(() => setLoading(false));
-  }, [isOpen, currentMonth, doctorSid, serviceSid]);
+      .finally(() => setCalLoading(false));
+  }, [isOpen, calYear, calMonth, doctorSid, serviceSid]);
 
   // Load slots when a date is selected
   useEffect(() => {
@@ -66,14 +69,26 @@ export default function RescheduleModal({
       setDaySlots(null);
       return;
     }
-    setLoading(true);
+    setSlotsLoading(true);
     doctorsApi.availableSlots(doctorSid, selectedDate, { serviceSid })
       .then(setDaySlots)
       .catch(() => setDaySlots(null))
-      .finally(() => setLoading(false));
+      .finally(() => setSlotsLoading(false));
   }, [selectedDate, doctorSid, serviceSid]);
 
   if (!isOpen) return null;
+
+  const handleMonthChange = (year: number, month: number) => {
+    setCalYear(year);
+    setCalMonth(month);
+    setSelectedDate(null);
+    setSelectedTime('');
+  };
+
+  const handleSelectDate = (date: string) => {
+    setSelectedDate(date);
+    setSelectedTime('');
+  };
 
   const handleConfirm = async () => {
     if (!selectedDate || !selectedTime) return;
@@ -85,7 +100,7 @@ export default function RescheduleModal({
       onClose();
     } catch (err: unknown) {
       const apiError = err as { data?: { detail?: string } };
-      setError(apiError?.data?.detail || 'Could not reschedule the appointment.');
+      setError(apiError?.data?.detail || t('booking.rescheduleError'));
     } finally {
       setSubmitting(false);
     }
@@ -97,11 +112,11 @@ export default function RescheduleModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="w-full max-w-3xl rounded-lg bg-white shadow-xl max-h-[90vh] overflow-hidden flex flex-col">
         <div className="flex items-center justify-between border-b p-4">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">{title || 'Reschedule Appointment'}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">Current: {currentDateFormatted}</p>
+            <h2 className="text-lg font-bold text-gray-900">{title || t('booking.rescheduleTitle')}</h2>
+            <p className="text-xs text-gray-500 mt-0.5">{t('booking.currentLabel')}: {currentDateFormatted}</p>
           </div>
           <button onClick={onClose} className="rounded p-1 hover:bg-gray-100">
             <svg className="h-5 w-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -115,79 +130,29 @@ export default function RescheduleModal({
 
           {!doctorSid || !serviceSid ? (
             <div className="py-8 text-center text-sm text-gray-500">
-              This appointment cannot be rescheduled (missing doctor or service).
+              {t('booking.cannotReschedule')}
             </div>
           ) : (
             <>
-              {/* Month navigator */}
-              <div className="flex items-center justify-between">
-                <button
-                  type="button"
-                  onClick={() => setMonthOffset((m) => Math.max(0, m - 1))}
-                  disabled={monthOffset === 0}
-                  className="rounded-md border px-3 py-1.5 text-sm disabled:opacity-40"
-                >
-                  ← Prev
-                </button>
-                <p className="text-sm font-semibold">{new Date(currentMonth + '-01').toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}</p>
-                <button
-                  type="button"
-                  onClick={() => setMonthOffset((m) => m + 1)}
-                  className="rounded-md border px-3 py-1.5 text-sm"
-                >
-                  Next →
-                </button>
-              </div>
+              <MonthCalendar
+                year={calYear}
+                month={calMonth}
+                availableDays={days}
+                selectedDate={selectedDate}
+                onSelectDate={handleSelectDate}
+                onMonthChange={handleMonthChange}
+                loading={calLoading}
+              />
 
-              {/* Days grid */}
-              <div>
-                <p className="text-xs font-medium text-gray-600 mb-2">Available days</p>
-                {loading && !daySlots ? (
-                  <div className="grid grid-cols-7 gap-2">
-                    {[...Array(14)].map((_, i) => <div key={i} className="h-12 rounded-md bg-gray-100 animate-pulse" />)}
-                  </div>
-                ) : days.length === 0 ? (
-                  <p className="text-sm text-gray-500 py-4 text-center">No available days this month.</p>
-                ) : (
-                  <div className="grid grid-cols-4 sm:grid-cols-7 gap-2">
-                    {days.map((d) => {
-                      const dateObj = new Date(d.date + 'T00:00:00');
-                      const isSelected = selectedDate === d.date;
-                      const isFull = d.available_slots === 0;
-                      return (
-                        <button
-                          key={d.date}
-                          type="button"
-                          onClick={() => { setSelectedDate(d.date); setSelectedTime(''); }}
-                          disabled={isFull}
-                          className={`rounded-md border-2 p-2 text-center transition ${
-                            isSelected
-                              ? 'border-blue-600 bg-blue-50'
-                              : isFull
-                                ? 'border-gray-200 bg-gray-50 opacity-50'
-                                : 'border-gray-200 hover:border-blue-400'
-                          }`}
-                        >
-                          <p className="text-[10px] uppercase text-gray-500">{dateObj.toLocaleDateString('en-US', { weekday: 'short' })}</p>
-                          <p className="text-sm font-bold text-gray-900">{dateObj.getDate()}</p>
-                          <p className="text-[9px] text-gray-500">{d.available_slots} free</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
-
-              {/* Time slots */}
               {selectedDate && (
-                <div>
-                  <p className="text-xs font-medium text-gray-600 mb-2">Available times</p>
-                  {loading ? (
+                <div className="rounded-xl border border-gray-100 bg-white p-4 shadow-sm">
+                  <p className="mb-2 text-xs font-medium text-gray-600">{t('booking.availableTimes')}</p>
+                  {slotsLoading ? (
                     <div className="grid grid-cols-4 gap-2">
                       {[...Array(8)].map((_, i) => <div key={i} className="h-8 rounded-md bg-gray-100 animate-pulse" />)}
                     </div>
                   ) : !daySlots || daySlots.slots.length === 0 ? (
-                    <p className="text-sm text-gray-500 py-2">No slots available on this day.</p>
+                    <p className="text-sm text-gray-500 py-2">{t('booking.noSlotsThisDay')}</p>
                   ) : (
                     <div className="grid grid-cols-4 sm:grid-cols-6 gap-2">
                       {daySlots.slots.filter((s) => !s.is_break).map((slot) => {
@@ -225,14 +190,14 @@ export default function RescheduleModal({
             disabled={submitting}
             className="flex-1 rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
           >
-            Cancel
+            {t('booking.cancel')}
           </button>
           <button
             onClick={handleConfirm}
             disabled={!selectedDate || !selectedTime || submitting}
             className="flex-1 rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {submitting ? 'Rescheduling…' : 'Confirm Reschedule'}
+            {submitting ? t('booking.rescheduling') : t('booking.confirmReschedule')}
           </button>
         </div>
       </div>

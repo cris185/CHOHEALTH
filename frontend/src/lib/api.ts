@@ -268,6 +268,8 @@ export interface AppointmentItem {
   service_cost: string;
   service_duration: number;
   branch_name: string | null;
+  meeting_link: string;
+  meeting_provider: string;
   issues: string;
   symptoms: string;
   notes: string;
@@ -345,6 +347,8 @@ export interface DoctorAppointmentDetail extends DoctorAppointmentItem {
   patient_gender: string;
   patient_blood_group: string;
   room: string;
+  meeting_link: string;
+  meeting_provider: string;
   doctor_sid: string | null;
   service_sid: string | null;
   invoice_status: string | null;
@@ -390,10 +394,11 @@ export const appointments = {
     sid: string,
     newStatus: 'In Progress' | 'Completed' | 'Cancelled' | 'No Show',
     token: string,
-  ): Promise<{ detail: string; status: string }> =>
+    extra?: { meeting_link?: string; meeting_provider?: string },
+  ): Promise<{ detail: string; status: string; meeting_link?: string }> =>
     fetchAPI(`/appointments/doctor/${sid}/status/`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: newStatus }),
+      body: JSON.stringify({ status: newStatus, ...extra }),
       token,
     }),
 
@@ -777,6 +782,74 @@ export const medicineOrders = {
     fetchAPI(`/medicine-orders/${sid}/`, { token }),
 };
 
+// ---- Medicine delivery (bundled shipping) ----
+
+export interface PrescriptionDeliveryCreateResponse {
+  order_sid: string;
+  total: string;
+  shipping_fee: string;
+  item_count: number;
+  origin_branch: string;
+  address: string;
+}
+
+export interface DeliveryTrackingItem {
+  sid: string;
+  name: string;
+  dosage_form: string;
+  strength: string;
+  quantity: number;
+  unit_price: string;
+  total: string;
+}
+
+export interface DeliveryTrackingResponse {
+  order_sid: string;
+  stage: 'picked_up' | 'left_origin' | 'on_the_way' | 'arriving_soon' | 'delivered';
+  stage_index: number;
+  total_stages: number;
+  started_at: string | null;
+  delivered_at: string | null;
+  origin_branch: string;
+  address: string;
+  shipping_fee: string;
+  total: string;
+  items: DeliveryTrackingItem[];
+}
+
+export interface DeliveryListItem {
+  order_sid: string;
+  created_at: string;
+  status: string;
+  stage: DeliveryTrackingResponse['stage'] | null;
+  stage_index: number | null;
+  total_stages: number;
+  origin_branch: string;
+  address: string;
+  item_count: number;
+  total: string;
+  shipping_fee: string;
+}
+
+export const medicineDelivery = {
+  createFromPrescription: (
+    prescriptionSid: string,
+    address: string,
+    token: string,
+  ): Promise<PrescriptionDeliveryCreateResponse> =>
+    fetchAPI(`/prescriptions/${prescriptionSid}/delivery/`, {
+      method: 'POST',
+      body: JSON.stringify({ address }),
+      token,
+    }),
+
+  tracking: (orderSid: string, token: string): Promise<DeliveryTrackingResponse> =>
+    fetchAPI(`/medicine-orders/${orderSid}/tracking/`, { token }),
+
+  list: (token: string): Promise<DeliveryListItem[]> =>
+    fetchAPI('/deliveries/', { token }),
+};
+
 // ---- Prescribed lab booking (free appointment) ----
 
 export interface BookPrescribedLabResponse {
@@ -1070,6 +1143,13 @@ export const medicineOrderPaymentFlow = {
     fetchAPI('/payments/medicine-order/stripe/verify/', {
       method: 'POST',
       body: JSON.stringify({ order_sid: orderSid, session_id: sessionId }),
+      token,
+    }),
+
+  stripeSavedCardPay: (orderSid: string, paymentMethodId: string, token: string) =>
+    fetchAPI('/payments/medicine-order/stripe/saved-card/', {
+      method: 'POST',
+      body: JSON.stringify({ order_sid: orderSid, payment_method_id: paymentMethodId }),
       token,
     }),
 

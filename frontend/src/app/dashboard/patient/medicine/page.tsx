@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  Pill, ShoppingCart, FileText, ExternalLink, ShieldCheck, Package, Check, Download,
+  Pill, ShoppingCart, FileText, ExternalLink, ShieldCheck, Package, Check, Download, Truck,
 } from 'lucide-react';
 import {
   patientMedicalRecords,
@@ -23,10 +23,12 @@ import {
   PatientMedicalRecordListItem,
   MedicineOrderCreateResponse,
   MedicineOrderListItem,
+  PrescriptionDeliveryCreateResponse,
 } from '@/lib/api';
 import CartCheckoutModal from '@/components/medicine/CartCheckoutModal';
 import OrderPickupCode from '@/components/medicine/OrderPickupCode';
 import PaymentModal from '@/components/booking/PaymentModal';
+import RequestDeliveryModal from '@/components/medicine/RequestDeliveryModal';
 import InitialsAvatar, { resolveImageUrl } from '@/components/InitialsAvatar';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
@@ -61,6 +63,9 @@ interface PayOrderData {
   orderSid: string;
   total: string;
   serviceName: string;
+  /** When true, the patient is paying for a delivery order; on success we
+   *  route them to the tracking page instead of just showing a toast. */
+  isDelivery?: boolean;
 }
 
 interface Toast { kind: 'success' | 'error'; text: string }
@@ -80,6 +85,7 @@ export default function MedicinePage() {
   const [toast, setToast] = useState<Toast | null>(null);
   const [checkoutOpen, setCheckoutOpen] = useState(false);
   const [payOrderData, setPayOrderData] = useState<PayOrderData | null>(null);
+  const [deliveryRxSid, setDeliveryRxSid] = useState<string | null>(null);
   // Track which meds were just added to cart (for brief "Added" feedback).
   const [justAdded, setJustAdded] = useState<Set<string>>(new Set());
 
@@ -159,7 +165,7 @@ export default function MedicinePage() {
   };
 
   // After checkout
-  const handleCheckoutSuccess = (response: MedicineOrderCreateResponse) => {
+  const handleCheckoutSuccess = (response: MedicineOrderCreateResponse, method: 'pickup' | 'delivery') => {
     if (response.status === 'Paid') {
       setToast({ kind: 'success', text: t('successFree') });
     } else {
@@ -167,6 +173,7 @@ export default function MedicinePage() {
         orderSid: response.order_sid,
         total: response.total,
         serviceName: t('orderItemsCount', { count: '1' }),
+        isDelivery: method === 'delivery',
       });
     }
     loadRecords();
@@ -174,10 +181,25 @@ export default function MedicinePage() {
   };
 
   const handlePaymentSuccess = () => {
+    const data = payOrderData;
     setPayOrderData(null);
+    if (data?.isDelivery) {
+      router.push(`/dashboard/patient/delivery/${data.orderSid}`);
+      return;
+    }
     setToast({ kind: 'success', text: t('successPaid') });
     loadRecords();
     loadOrders();
+  };
+
+  const handleDeliveryCreated = (response: PrescriptionDeliveryCreateResponse) => {
+    setDeliveryRxSid(null);
+    setPayOrderData({
+      orderSid: response.order_sid,
+      total: response.total,
+      serviceName: t('orderItemsCount', { count: String(response.item_count) }),
+      isDelivery: true,
+    });
   };
 
   const handleDownloadRxPdf = async (prescriptionSid: string) => {
@@ -257,6 +279,16 @@ export default function MedicinePage() {
                             <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">
                               {formatRxCode(record.prescription.sid)}
                             </span>
+                            {record.prescription.items.some((it) => it.is_system_medication && !it.is_claimed) && (
+                              <Button
+                                size="sm"
+                                className="h-7 gap-1 bg-primary text-xs text-primary-foreground hover:bg-primary/90"
+                                onClick={() => setDeliveryRxSid(record.prescription!.sid)}
+                              >
+                                <Truck className="h-3 w-3" />
+                                {t('requestDelivery')}
+                              </Button>
+                            )}
                             <Button
                               size="sm"
                               variant="outline"
@@ -470,6 +502,14 @@ export default function MedicinePage() {
         onClose={() => setCheckoutOpen(false)}
         onSuccess={handleCheckoutSuccess}
         freeMedicationSids={freeMedicationSids}
+      />
+
+      {/* Prescription delivery request modal (bundled shipping) */}
+      <RequestDeliveryModal
+        isOpen={!!deliveryRxSid}
+        onClose={() => setDeliveryRxSid(null)}
+        prescriptionSid={deliveryRxSid}
+        onCreated={handleDeliveryCreated}
       />
 
       {/* Payment Modal (for orders that need online payment) */}

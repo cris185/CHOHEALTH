@@ -20,6 +20,10 @@ from .appointment_actions import (
     PatientAppointmentDeleteView,
     DoctorAppointmentCancelView, DoctorAppointmentRescheduleView,
 )
+from .delivery_views import (
+    PrescriptionDeliveryCreateView, MedicineDeliveryTrackingView,
+    PatientDeliveryListView,
+)
 
 urlpatterns = [
     path('services/', ServiceListView.as_view(), name='service-list'),
@@ -56,4 +60,9 @@ urlpatterns = [
     path('medicine-orders/', MedicineOrderCreateView.as_view(), name='medicine-order-create'),
     path('medicine-orders/my/', MedicineOrderListView.as_view(), name='medicine-order-list'),
     path('medicine-orders/<str:sid>/', MedicineOrderDetailView.as_view(), name='medicine-order-detail'),
+
+    # Delivery (bundled shipping)
+    path('prescriptions/<str:sid>/delivery/', PrescriptionDeliveryCreateView.as_view(), name='prescription-delivery-create'),
+    path('medicine-orders/<str:sid>/tracking/', MedicineDeliveryTrackingView.as_view(), name='medicine-order-tracking'),
+    path('deliveries/', PatientDeliveryListView.as_view(), name='patient-delivery-list'),
 ]

@@ -59,24 +59,61 @@ class DoctorAppointmentStatusUpdateView(APIView):
 
         serializer = AppointmentStatusUpdateSerializer(
             data=request.data,
-            context={'current_status': appointment.status},
+            context={
+                'current_status': appointment.status,
+                'mode': appointment.mode,
+            },
         )
         serializer.is_valid(raise_exception=True)
 
         new_status = serializer.validated_data['status']
+        update_fields = ['status']
         appointment.status = new_status
-        appointment.save(update_fields=['status'])
 
-        # Notify patient
-        _notify(
-            appointment.patient.user,
-            f'Appointment {new_status}',
-            f'Appointment {new_status}',
-            f'Your appointment has been marked as {new_status}.',
-            appointment,
+        # Stash the meeting link on the appointment the moment the doctor
+        # starts a virtual consultation, then email the patient so they can
+        # click through and join without going back to the app.
+        is_virtual_start = (
+            new_status == 'In Progress'
+            and appointment.mode == 'Virtual'
+            and serializer.validated_data.get('meeting_link')
         )
+        if is_virtual_start:
+            appointment.meeting_link = serializer.validated_data['meeting_link']
+            appointment.meeting_provider = serializer.validated_data.get('meeting_provider', '')
+            update_fields.extend(['meeting_link', 'meeting_provider'])
 
-        return Response({'detail': f'Appointment status updated to {new_status}.', 'status': new_status})
+        appointment.save(update_fields=update_fields)
+
+        if is_virtual_start:
+            _notify(
+                appointment.patient.user,
+                'Virtual consultation started',
+                'Your virtual consultation is ready',
+                f'Dr. {appointment.doctor.first_name} {appointment.doctor.first_last_name} is waiting for you. Tap to join the meeting.',
+                appointment,
+            )
+            try:
+                from userauths.services.email_service import send_virtual_appointment_started_email
+                send_virtual_appointment_started_email(appointment)
+            except Exception:
+                # Fire-and-forget: the meeting link is already persisted, the
+                # patient can still find it in the in-app notification.
+                pass
+        else:
+            _notify(
+                appointment.patient.user,
+                f'Appointment {new_status}',
+                f'Appointment {new_status}',
+                f'Your appointment has been marked as {new_status}.',
+                appointment,
+            )
+
+        return Response({
+            'detail': f'Appointment status updated to {new_status}.',
+            'status': new_status,
+            'meeting_link': appointment.meeting_link,
+        })
 
 
 class DoctorAppointmentCompleteView(APIView):
@@ -753,13 +790,17 @@ class MedicineOrderCreateView(APIView):
         patient = request.user.patient
         data = serializer.validated_data
 
-        # Resolve branch
+        # Resolve branch. For pickup the patient chooses one explicitly; for
+        # delivery we auto-assign the first active branch as the courier's
+        # pickup point (patient doesn't care which branch ships it).
         branch = None
         if data['delivery_method'] == 'pickup' and data.get('branch_sid'):
             try:
                 branch = Branch.objects.get(sid=data['branch_sid'], is_active=True)
             except Branch.DoesNotExist:
                 return Response({'detail': 'Branch not found.'}, status=status.HTTP_400_BAD_REQUEST)
+        elif data['delivery_method'] == 'delivery':
+            branch = Branch.objects.filter(is_active=True).order_by('pk').first()
 
         # Resolve price + optional prescription-item binding for each line
         # BEFORE creating the order, so a 403 on any single item aborts the

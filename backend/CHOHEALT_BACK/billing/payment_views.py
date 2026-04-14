@@ -4,7 +4,7 @@ from decimal import Decimal
 
 from django.conf import settings
 from django.utils import timezone
-from django.db import transaction
+from django.db import transaction, IntegrityError
 from django.http import HttpResponse
 
 from rest_framework import status
@@ -13,7 +13,7 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from patient.permissions import IsPatient
-from base.models import Appointment, Service, Branch, MedicineOrder
+from base.models import Appointment, Service, Branch, MedicineOrder, MedicineDelivery
 from base.pickup_code import generate_unique_pickup_code, generate_qr_png_bytes
 from doctor.models import Doctor, Notification
 from .stripe_customer import get_or_create_stripe_customer
@@ -21,6 +21,7 @@ from .models import Invoice, InvoiceLineItem, Payment
 from userauths.services.email_service import (
     send_appointment_confirmation_email,
     send_medicine_order_pickup_email,
+    send_medicine_order_shipped_email,
 )
 
 stripe.api_key = settings.STRIPE_SECRET_KEY
@@ -265,10 +266,13 @@ class StripeSavedCardPayView(APIView):
             )
 
             if payment_intent.status == 'succeeded':
-                _process_payment_success(
-                    appointment, 'stripe',
-                    payment_intent.id, {'payment_intent_id': payment_intent.id}
-                )
+                try:
+                    _process_payment_success(
+                        appointment, 'stripe',
+                        payment_intent.id, {'payment_intent_id': payment_intent.id}
+                    )
+                except SlotAlreadyBookedError as e:
+                    return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
                 return Response({'detail': 'Payment successful.', 'appointment_sid': appointment.sid})
             else:
                 return Response({'detail': 'Payment requires additional action.', 'client_secret': payment_intent.client_secret}, status=status.HTTP_402_PAYMENT_REQUIRED)
@@ -319,43 +323,66 @@ def _process_appointment_payment_success(appointment, payment_method, gateway_ch
     bookable = _appointment_bookable(appointment)
     total = bookable.cost if bookable else Decimal('0')
 
-    invoice = Invoice.objects.create(
-        appointment=appointment,
-        patient=appointment.patient,
-        subtotal=total,
-        total=total,
-        amount_paid=total,
-        balance_due=Decimal('0'),
-        status='Paid',
-        issued_at=timezone.now(),
-    )
+    # Wrap the whole Confirmed-transition in an atomic block so an IntegrityError
+    # from the `unique_doctor_booked_slot` constraint rolls back any Invoice /
+    # Payment / LineItem rows we wrote. If the constraint fires it means a
+    # concurrent payment won the race — raise a clear exception so the caller
+    # can surface it and trigger a refund.
+    try:
+        with transaction.atomic():
+            invoice = Invoice.objects.create(
+                appointment=appointment,
+                patient=appointment.patient,
+                subtotal=total,
+                total=total,
+                amount_paid=total,
+                balance_due=Decimal('0'),
+                status='Paid',
+                issued_at=timezone.now(),
+            )
 
-    if bookable:
-        InvoiceLineItem.objects.create(
-            invoice=invoice,
-            description=bookable.name,
-            quantity=1,
-            unit_price=bookable.cost,
-            total=bookable.cost,
-            service=appointment.service,  # None for lab-only appointments
+            if bookable:
+                InvoiceLineItem.objects.create(
+                    invoice=invoice,
+                    description=bookable.name,
+                    quantity=1,
+                    unit_price=bookable.cost,
+                    total=bookable.cost,
+                    service=appointment.service,
+                )
+
+            Payment.objects.create(
+                invoice=invoice,
+                amount=total,
+                payment_method=payment_method,
+                gateway_charge_id=gateway_charge_id,
+                gateway_response=gateway_response,
+                status='Completed',
+                paid_at=timezone.now(),
+            )
+
+            appointment.status = 'Confirmed'
+            appointment.save(update_fields=['status'])
+    except IntegrityError:
+        raise SlotAlreadyBookedError(
+            'Another booking confirmed this slot before payment completed. '
+            'A refund will need to be issued.'
         )
-
-    Payment.objects.create(
-        invoice=invoice,
-        amount=total,
-        payment_method=payment_method,
-        gateway_charge_id=gateway_charge_id,
-        gateway_response=gateway_response,
-        status='Completed',
-        paid_at=timezone.now(),
-    )
-
-    appointment.status = 'Confirmed'
-    appointment.save(update_fields=['status'])
 
     _create_appointment_notification(appointment)
     send_appointment_confirmation_email(appointment, invoice)
     return True
+
+
+class SlotAlreadyBookedError(Exception):
+    """Raised when the DB's unique_doctor_booked_slot constraint wins a race.
+
+    Signals the caller that the Stripe/PayPal charge went through but we could
+    not confirm the appointment because the slot was grabbed by another
+    concurrent payment. The payment needs to be refunded manually (or via the
+    refund endpoint).
+    """
+    pass
 
 
 def _process_medicine_order_payment_success(order, payment_method, gateway_charge_id, gateway_response):
@@ -384,7 +411,7 @@ def _process_medicine_order_payment_success(order, payment_method, gateway_charg
     invoice = Invoice.objects.create(
         medicine_order=order,
         patient=order.patient,
-        subtotal=order.subtotal or total,
+        subtotal=order.subtotal,
         total=total,
         amount_paid=total,
         balance_due=Decimal('0'),
@@ -393,7 +420,9 @@ def _process_medicine_order_payment_success(order, payment_method, gateway_charg
     )
 
     # One invoice line per medicine item, so the patient's billing history
-    # shows exactly what they paid for.
+    # shows exactly what they paid for. Zero-priced lines (prescribed meds
+    # covered by the hospital) still appear — they make the invoice self-
+    # documenting even when the patient only pays shipping.
     for idx, item in enumerate(order.items.select_related('medication').all()):
         InvoiceLineItem.objects.create(
             invoice=invoice,
@@ -406,6 +435,19 @@ def _process_medicine_order_payment_success(order, payment_method, gateway_charg
             order=idx,
         )
 
+    # Shipping line — only added if the order actually paid for delivery
+    # (i.e. a prescription being shipped). Direct cart purchases have
+    # shipping_fee=0 so we skip this line.
+    if order.shipping_fee and order.shipping_fee > 0:
+        InvoiceLineItem.objects.create(
+            invoice=invoice,
+            description='Shipping fee',
+            quantity=1,
+            unit_price=order.shipping_fee,
+            total=order.shipping_fee,
+            order=order.items.count(),
+        )
+
     Payment.objects.create(
         invoice=invoice,
         amount=total,
@@ -416,30 +458,56 @@ def _process_medicine_order_payment_success(order, payment_method, gateway_charg
         paid_at=timezone.now(),
     )
 
-    # Assign a pickup code so the patient has something to show at the branch.
-    # Already-present codes are left alone in the unlikely case this helper is
-    # called twice for the same order.
-    if not order.pickup_code:
-        order.pickup_code = generate_unique_pickup_code()
+    is_delivery = order.delivery_method == 'delivery'
 
-    order.status = 'Paid'
-    order.save(update_fields=['status', 'pickup_code'])
+    # Delivery orders get a tracking record instead of a pickup code; the
+    # patient watches the stage progress on the tracking page.
+    update_fields = ['status']
+    if is_delivery:
+        MedicineDelivery.objects.create(
+            order=order,
+            origin_branch=order.delivery_branch,
+            address=order.delivery_address,
+            stage='picked_up',
+            started_at=timezone.now(),
+        )
+        order.status = 'Dispatched'
+    else:
+        if not order.pickup_code:
+            order.pickup_code = generate_unique_pickup_code()
+            update_fields.append('pickup_code')
+        order.status = 'Paid'
 
-    # Notify the patient in-app and via email (with the QR attached inline).
+    order.save(update_fields=update_fields)
+
     Notification.objects.create(
         recipient=order.patient.user,
         type='Medicine Order Paid',
         title='Medicine Order Paid',
-        message=f'Your medicine order has been paid. Pickup code: {order.pickup_code}.',
+        message=(
+            'Your medicine order has been paid. A courier is picking it up now.'
+            if is_delivery
+            else f'Your medicine order has been paid. Pickup code: {order.pickup_code}.'
+        ),
     )
-    try:
-        qr_bytes = generate_qr_png_bytes(order.pickup_code)
-        send_medicine_order_pickup_email(order, qr_bytes)
-    except Exception:
-        # The email helper is already fire-and-forget; this secondary try/except
-        # only guards the QR generation itself so a rendering failure does not
-        # roll back the payment transaction.
-        pass
+
+    # Both paths get the invoice PDF attached so the patient has a receipt.
+    # Pickup orders also get the QR inline; delivery orders get a link to the
+    # live tracking page.
+    if is_delivery:
+        try:
+            send_medicine_order_shipped_email(order, invoice)
+        except Exception:
+            pass
+    else:
+        try:
+            qr_bytes = generate_qr_png_bytes(order.pickup_code)
+            send_medicine_order_pickup_email(order, qr_bytes, invoice=invoice)
+        except Exception:
+            # The email helper is already fire-and-forget; this secondary try/except
+            # only guards the QR generation itself so a rendering failure does not
+            # roll back the payment transaction.
+            pass
     return True
 
 
@@ -488,10 +556,13 @@ class StripeVerifyPaymentView(APIView):
                     return Response({'detail': 'Stripe session not found.'}, status=status.HTTP_400_BAD_REQUEST)
 
             if session.payment_status == 'paid':
-                _process_payment_success(
-                    appointment, 'stripe',
-                    session.payment_intent or '', {'session_id': session.id}
-                )
+                try:
+                    _process_payment_success(
+                        appointment, 'stripe',
+                        session.payment_intent or '', {'session_id': session.id}
+                    )
+                except SlotAlreadyBookedError as e:
+                    return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
                 return Response({'detail': 'Payment verified.', 'status': appointment.status})
             else:
                 return Response({'detail': 'Payment not completed yet.'}, status=status.HTTP_402_PAYMENT_REQUIRED)
@@ -571,9 +642,18 @@ class StripeWebhookView(APIView):
         except Appointment.DoesNotExist:
             return
 
-        _process_appointment_payment_success(
-            appointment, 'stripe', payment_intent, {'session_id': session_id},
-        )
+        try:
+            _process_appointment_payment_success(
+                appointment, 'stripe', payment_intent, {'session_id': session_id},
+            )
+        except SlotAlreadyBookedError:
+            # Webhook has no user to respond to. Leave appointment as Unpaid so
+            # the verify endpoint (or an admin) can trigger a refund explicitly.
+            import logging
+            logging.getLogger(__name__).error(
+                'Slot conflict on webhook for appointment %s — refund required.',
+                appointment.sid,
+            )
 
 
 class PayPalCreateOrderView(APIView):
@@ -642,10 +722,13 @@ class PayPalCaptureOrderView(APIView):
         payment = paypalrestsdk.Payment.find(payment_id)
 
         if payment.execute({"payer_id": payer_id}):
-            _process_payment_success(
-                appointment, 'paypal',
-                payment_id, payment.to_dict()
-            )
+            try:
+                _process_payment_success(
+                    appointment, 'paypal',
+                    payment_id, payment.to_dict()
+                )
+            except SlotAlreadyBookedError as e:
+                return Response({'detail': str(e)}, status=status.HTTP_409_CONFLICT)
             return Response({'detail': 'Payment successful.', 'appointment_sid': appointment.sid})
         else:
             return Response({'detail': payment.error}, status=status.HTTP_400_BAD_REQUEST)
@@ -683,6 +766,70 @@ class CancelPendingPaymentView(APIView):
 # reuse `Invoice`, `Payment` and the webhook — the only thing that changes is
 # the metadata (`kind='medicine_order'`) and the helper that records the
 # payment success.
+
+
+class MedicineOrderStripeSavedCardPayView(APIView):
+    """Charge a saved card off-session for a MedicineOrder — the one-click
+    path used by the payment modal. Mirrors `StripeSavedCardPayView` but for
+    medicine orders.
+    """
+    permission_classes = [IsPatient]
+
+    def post(self, request):
+        order_sid = request.data.get('order_sid')
+        payment_method_id = request.data.get('payment_method_id')
+
+        if not order_sid or not payment_method_id:
+            return Response(
+                {'detail': 'order_sid and payment_method_id required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        patient = request.user.patient
+        if not patient.stripe_customer_id:
+            return Response(
+                {'detail': 'No saved payment methods.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            order = MedicineOrder.objects.get(sid=order_sid, patient=patient)
+        except MedicineOrder.DoesNotExist:
+            return Response({'detail': 'Order not found.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        _, error = _validate_medicine_order_for_payment(order)
+        if error:
+            return Response({'detail': error}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            payment_intent = stripe.PaymentIntent.create(
+                amount=int(order.total * 100),
+                currency='usd',
+                customer=patient.stripe_customer_id,
+                payment_method=payment_method_id,
+                off_session=True,
+                confirm=True,
+                metadata={
+                    'kind': 'medicine_order',
+                    'medicine_order_sid': order.sid,
+                },
+            )
+
+            if payment_intent.status == 'succeeded':
+                _process_medicine_order_payment_success(
+                    order, 'stripe',
+                    payment_intent.id, {'payment_intent_id': payment_intent.id},
+                )
+                return Response({'detail': 'Payment successful.', 'order_sid': order.sid})
+            return Response(
+                {'detail': 'Payment requires additional action.', 'client_secret': payment_intent.client_secret},
+                status=status.HTTP_402_PAYMENT_REQUIRED,
+            )
+
+        except stripe.error.CardError as e:
+            return Response({'detail': f'Card error: {e.user_message}'}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as e:
+            return Response({'detail': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class MedicineOrderStripeCheckoutView(APIView):

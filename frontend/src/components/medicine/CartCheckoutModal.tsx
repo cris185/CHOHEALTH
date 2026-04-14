@@ -13,8 +13,10 @@ import {
 interface CartCheckoutModalProps {
   isOpen: boolean;
   onClose: () => void;
-  /** Fires after the backend creates the order. */
-  onSuccess: (response: MedicineOrderCreateResponse) => void;
+  /** Fires after the backend creates the order. The second argument tells
+   *  the parent whether the patient picked delivery, so it can route to the
+   *  tracking page after payment. */
+  onSuccess: (response: MedicineOrderCreateResponse, method: DeliveryMethod) => void;
   /**
    * Set of medication sids for which the patient has an active unclaimed
    * prescription. Items in this set will display as "$0" in the summary.
@@ -83,7 +85,7 @@ export default function CartCheckoutModal({
         token,
       );
       clearCart();
-      onSuccess(response);
+      onSuccess(response, method);
       onClose();
     } catch (err: unknown) {
       const apiError = err as { status?: number; data?: { detail?: string } };
@@ -166,8 +168,8 @@ export default function CartCheckoutModal({
 
           {method === 'delivery' && (
             <>
-              <div className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
-                {t('deliveryComingSoon')}
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs text-emerald-700">
+                {t('deliveryFreeNote')}
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700">{t('deliveryAddress')}</label>
