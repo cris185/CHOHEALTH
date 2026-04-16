@@ -122,13 +122,6 @@ export default function ServiceDetailPage() {
                       <div>
                         <h3 className="font-semibold text-gray-900">Dr. {doctor.full_name}</h3>
                         <p className="text-sm text-gray-500">{doctor.specialization} &middot; {doctor.years_of_experience} {t('services.experience')}</p>
-                        <p className="text-sm text-gray-500">
-                          <span className="font-medium">{t('services.nextAvailable')}:</span>{' '}
-                          {doctor.next_available_appointment_date
-                            ? new Date(doctor.next_available_appointment_date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-                            : t('services.notAvailable')
-                          }
-                        </p>
                       </div>
                     </div>
 

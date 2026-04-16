@@ -120,7 +120,6 @@ export default function DoctorNotificationsPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-semibold">{n.type}</span>
-                      {n.patient_name && <span className="text-sm text-muted-foreground">- {n.patient_name}</span>}
                     </div>
                     <p className="mt-1 text-sm text-muted-foreground">{n.message}</p>
                     <p className="mt-1 text-xs text-muted-foreground">

@@ -105,7 +105,7 @@ export default function PatientRegisterPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>{t('register.patient.gender')} *</Label>
-                  <Select required value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
+                  <Select required value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v ?? '' })}>
                     <SelectTrigger><SelectValue placeholder={t('register.patient.genderSelect')} /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="Male">{t('register.patient.genderMale')}</SelectItem>
@@ -116,7 +116,7 @@ export default function PatientRegisterPage() {
                 </div>
                 <div className="space-y-2">
                   <Label>{t('register.patient.bloodGroup')}</Label>
-                  <Select value={form.blood_group} onValueChange={(v) => setForm({ ...form, blood_group: v })}>
+                  <Select value={form.blood_group} onValueChange={(v) => setForm({ ...form, blood_group: v ?? '' })}>
                     <SelectTrigger><SelectValue placeholder={t('register.patient.bloodGroupSelect')} /></SelectTrigger>
                     <SelectContent>
                       {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map((bg) => (

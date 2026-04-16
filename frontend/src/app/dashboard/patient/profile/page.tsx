@@ -143,7 +143,7 @@ export default function PatientProfilePage() {
               </div>
               <div className="space-y-2">
                 <Label>Gender</Label>
-                <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v })}>
+                <Select value={form.gender} onValueChange={(v) => setForm({ ...form, gender: v ?? '' })}>
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="Male">Male</SelectItem>
@@ -154,7 +154,7 @@ export default function PatientProfilePage() {
               </div>
               <div className="space-y-2">
                 <Label>Blood Type</Label>
-                <Select value={form.blood_group} onValueChange={(v) => setForm({ ...form, blood_group: v })}>
+                <Select value={form.blood_group} onValueChange={(v) => setForm({ ...form, blood_group: v ?? '' })}>
                   <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                   <SelectContent>
                     {['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'].map((bg) => (
