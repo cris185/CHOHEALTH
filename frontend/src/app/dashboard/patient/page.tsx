@@ -11,6 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Separator } from '@/components/ui/separator';
 import ServiceList from '@/components/ServiceList';
+import PatientAppointmentDetailModal from '@/components/booking/PatientAppointmentDetailModal';
 import { CalendarDays, Clock, CheckCircle, FileText, FlaskConical, Bell, Activity, CalendarCheck } from 'lucide-react';
 import Link from 'next/link';
 
@@ -31,6 +32,7 @@ export default function PatientDashboard() {
   const router = useRouter();
   const [stats, setStats] = useState<PatientStats | null>(null);
   const [recentAppts, setRecentAppts] = useState<AppointmentItem[]>([]);
+  const [selectedAppt, setSelectedAppt] = useState<AppointmentItem | null>(null);
 
   useEffect(() => {
     if (loading) return;
@@ -162,7 +164,11 @@ export default function PatientDashboard() {
               ) : (
                 <div className="divide-y">
                   {recentAppts.map((appt) => (
-                    <div key={appt.sid} className="flex items-center justify-between px-6 py-3.5 hover:bg-muted/30 transition-colors">
+                    <button
+                      key={appt.sid}
+                      onClick={() => setSelectedAppt(appt)}
+                      className="w-full flex items-center justify-between px-6 py-3.5 hover:bg-muted/30 transition-colors text-left"
+                    >
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10">
                           <CalendarDays className="h-4 w-4 text-primary" />
@@ -173,7 +179,7 @@ export default function PatientDashboard() {
                         </div>
                       </div>
                       <Badge variant="outline" className={`shrink-0 ${statusVariant[appt.status] || ''}`}>{appt.status}</Badge>
-                    </div>
+                    </button>
                   ))}
                 </div>
               )}
@@ -211,14 +217,20 @@ export default function PatientDashboard() {
         </motion.div>
       </div>
 
-      {/* Services */}
+      {/* Quick Booking */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">{t('services.title')}</h3>
+          <h3 className="text-lg font-semibold">{t('services.quickBooking')}</h3>
           <Link href="/dashboard/patient/services" className="text-sm text-primary hover:underline">View all</Link>
         </div>
-        <ServiceList showBookButton={false} clickable={true} />
+        <ServiceList showBookButton={true} clickable={true} randomLimit={3} />
       </motion.div>
+
+      <PatientAppointmentDetailModal
+        isOpen={selectedAppt !== null}
+        onClose={() => setSelectedAppt(null)}
+        appointment={selectedAppt}
+      />
     </div>
   );
 }

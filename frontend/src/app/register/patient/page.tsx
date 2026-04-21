@@ -11,6 +11,8 @@ import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
+import PasswordStrength from '@/components/PasswordStrength';
+import PhoneInput from '@/components/PhoneInput';
 
 export default function PatientRegisterPage() {
   const { registerPatient } = useAuth();
@@ -90,7 +92,7 @@ export default function PatientRegisterPage() {
 
               <div className="space-y-2">
                 <Label htmlFor="phone">{t('common.phone')}</Label>
-                <Input id="phone" name="phone" value={form.phone} onChange={handleChange} placeholder="+1 234 567 8900" />
+                <PhoneInput value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} />
               </div>
 
               <div className="space-y-2">
@@ -131,6 +133,7 @@ export default function PatientRegisterPage() {
                 <div className="space-y-2">
                   <Label htmlFor="password">{t('common.password')} *</Label>
                   <Input id="password" name="password" type="password" required minLength={8} value={form.password} onChange={handleChange} placeholder={t('register.patient.minChars')} />
+                  <PasswordStrength password={form.password} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password_confirm">{t('common.confirmPassword')} *</Label>

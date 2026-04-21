@@ -27,7 +27,7 @@ export default function DoctorDashboardLayout({ children }: { children: React.Re
   const { logout } = useAuth();
 
   return (
-    <div className="flex min-h-[calc(100vh-65px)]">
+    <div className="flex min-h-[calc(100vh-4rem)]">
       <DoctorSidebar />
 
       {/* Mobile Sheet */}

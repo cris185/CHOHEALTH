@@ -9,19 +9,45 @@ import ServiceCard from './ServiceCard';
 interface ServiceListProps {
   showBookButton?: boolean;
   clickable?: boolean;
+  randomLimit?: number;
 }
 
-export default function ServiceList({ showBookButton = true, clickable = false }: ServiceListProps) {
+export default function ServiceList({ showBookButton = true, clickable = false, randomLimit }: ServiceListProps) {
   const t = useTranslations();
   const [servicesList, setServicesList] = useState<Service[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    const cacheKey = randomLimit ? `services-random-${randomLimit}` : null;
+
+    if (cacheKey) {
+      const cached = sessionStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          setServicesList(JSON.parse(cached));
+          setLoading(false);
+          return;
+        } catch {
+          sessionStorage.removeItem(cacheKey);
+        }
+      }
+    }
+
     servicesApi.list()
-      .then(setServicesList)
+      .then((data) => {
+        let result = data;
+        if (randomLimit && data.length > randomLimit) {
+          const shuffled = [...data].sort(() => Math.random() - 0.5);
+          result = shuffled.slice(0, randomLimit);
+          if (cacheKey) {
+            sessionStorage.setItem(cacheKey, JSON.stringify(result));
+          }
+        }
+        setServicesList(result);
+      })
       .catch(() => {})
       .finally(() => setLoading(false));
-  }, []);
+  }, [randomLimit]);
 
   if (loading) {
     return (

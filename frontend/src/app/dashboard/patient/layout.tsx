@@ -11,7 +11,7 @@ import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import { Menu, Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Pill, TestTubes } from 'lucide-react';
+import { Menu, Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Pill, TestTubes, Star } from 'lucide-react';
 
 const navItems = [
   { key: 'dashboard', href: '/dashboard/patient', icon: Home, exact: true },
@@ -20,6 +20,7 @@ const navItems = [
   { key: 'medicine', href: '/dashboard/patient/medicine', icon: Pill },
   { key: 'labs', href: '/dashboard/patient/labs', icon: TestTubes },
   { key: 'notifications', href: '/dashboard/patient/notifications', icon: Bell },
+  { key: 'reviews', href: '/dashboard/patient/reviews', icon: Star },
   { key: 'payments', href: '/dashboard/patient/payments', icon: DollarSign },
   { key: 'profile', href: '/dashboard/patient/profile', icon: User },
 ];
@@ -31,7 +32,7 @@ export default function PatientDashboardLayout({ children }: { children: React.R
   const { logout } = useAuth();
 
   return (
-    <div className="flex min-h-[calc(100vh-65px)]">
+    <div className="flex min-h-[calc(100vh-4rem)]">
       <PatientSidebar />
 
       {/* Mobile Sheet */}

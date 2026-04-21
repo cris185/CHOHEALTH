@@ -14,6 +14,8 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { Badge } from '@/components/ui/badge';
 import { User, Camera, Loader2, CheckCircle, Plus, Trash2, GraduationCap } from 'lucide-react';
+import PhoneInput from '@/components/PhoneInput';
+import CountrySelect from '@/components/CountrySelect';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -174,8 +176,8 @@ export default function DoctorProfilePage() {
               <div className="space-y-2"><Label>{t('common.secondLastName')}</Label><Input name="second_last_name" value={form.second_last_name} onChange={handleChange} /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Phone</Label><Input name="mobile" value={form.mobile} onChange={handleChange} /></div>
-              <div className="space-y-2"><Label>Country</Label><Input name="country" value={form.country} onChange={handleChange} /></div>
+              <div className="space-y-2"><Label>Phone</Label><PhoneInput value={form.mobile} onChange={(v) => setForm({ ...form, mobile: v })} /></div>
+              <div className="space-y-2"><Label>Country</Label><CountrySelect value={form.country} onChange={(v) => setForm({ ...form, country: v })} /></div>
             </div>
             <div className="space-y-2"><Label>Specialization *</Label><Input name="specialization" required value={form.specialization} onChange={handleChange} /></div>
             <div className="space-y-2"><Label>Years of Experience</Label><Input name="years_of_experience" type="number" min={0} value={form.years_of_experience} onChange={handleChange} /></div>

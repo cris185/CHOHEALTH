@@ -23,6 +23,22 @@ class Doctor(models.Model):
     specialization = models.CharField(max_length=200)
     years_of_experience = models.PositiveIntegerField(default=0)
 
+    # Denormalized rating aggregates. Kept in sync by a post_save / post_delete
+    # signal on `base.Review` so the doctor listing (a hot query) doesn't have
+    # to compute an AVG on every request.
+    average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
+    total_reviews = models.PositiveIntegerField(default=0)
+
+    def recalculate_rating(self):
+        from base.models import Review
+        from django.db.models import Avg, Count
+        agg = Review.objects.filter(doctor=self).aggregate(
+            avg=Avg('rating'), total=Count('id'),
+        )
+        self.average_rating = round(agg['avg'] or 0, 2)
+        self.total_reviews = agg['total'] or 0
+        self.save(update_fields=['average_rating', 'total_reviews'])
+
     @property
     def full_name(self):
         parts = [self.first_name, self.second_name, self.first_last_name, self.second_last_name]
@@ -110,6 +126,7 @@ NOTIFICATION_TYPE = (
     ('Medication Ready for Pickup', 'Medication Ready for Pickup'),
     ('Medication Dispatched', 'Medication Dispatched'),
     ('Medication Delivered', 'Medication Delivered'),
+    ('Rate Doctor', 'Rate Doctor'),
 )
 
 

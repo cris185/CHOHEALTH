@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { useAuth } from '@/context/AuthContext';
 import { services as servicesApi, Service } from '@/lib/api';
 import InitialsAvatar, { resolveImageUrl } from '@/components/InitialsAvatar';
+import StarRating from '@/components/StarRating';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -122,6 +123,16 @@ export default function ServiceDetailPage() {
                       <div>
                         <h3 className="font-semibold text-gray-900">Dr. {doctor.full_name}</h3>
                         <p className="text-sm text-gray-500">{doctor.specialization} &middot; {doctor.years_of_experience} {t('services.experience')}</p>
+                        {doctor.total_reviews > 0 ? (
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <StarRating value={Number(doctor.average_rating)} size="sm" />
+                            <span className="text-xs text-gray-600">
+                              {Number(doctor.average_rating).toFixed(1)} ({doctor.total_reviews})
+                            </span>
+                          </div>
+                        ) : (
+                          <p className="mt-1 text-xs text-gray-400">No reviews yet</p>
+                        )}
                       </div>
                     </div>
 

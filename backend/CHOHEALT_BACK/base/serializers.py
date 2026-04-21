@@ -2,7 +2,7 @@ from datetime import datetime, timedelta
 from django.conf import settings
 from django.utils import timezone
 from rest_framework import serializers
-from .models import Service, Appointment, Branch
+from .models import Service, Appointment, Branch, Review
 from doctor.models import Doctor, DoctorSchedule, DoctorQualification
 import zoneinfo
 
@@ -17,10 +17,15 @@ class ServiceDoctorSerializer(serializers.ModelSerializer):
     full_name = serializers.CharField(read_only=True)
     image = serializers.FileField(read_only=True)
     qualifications = DoctorQualificationBriefSerializer(many=True, read_only=True)
+    average_rating = serializers.DecimalField(max_digits=3, decimal_places=2, read_only=True)
+    total_reviews = serializers.IntegerField(read_only=True)
 
     class Meta:
         model = Doctor
-        fields = ('sid', 'full_name', 'image', 'specialization', 'qualifications', 'years_of_experience', 'bio')
+        fields = (
+            'sid', 'full_name', 'image', 'specialization', 'qualifications',
+            'years_of_experience', 'bio', 'average_rating', 'total_reviews',
+        )
 
 
 class ServiceListSerializer(serializers.ModelSerializer):
@@ -348,3 +353,84 @@ class ServiceDetailSerializer(serializers.ModelSerializer):
 
     def get_doctors_count(self, obj):
         return obj.doctors.count()
+
+
+# ============================================================================
+# Reviews (doctor rating from the patient after a completed appointment)
+# ============================================================================
+
+class ReviewSerializer(serializers.ModelSerializer):
+    """Read-only serializer used for listing reviews — both on a doctor's
+    public page and on the patient's "my reviews" view."""
+    patient_name = serializers.SerializerMethodField()
+    patient_image = serializers.SerializerMethodField()
+    doctor_sid = serializers.CharField(source='doctor.sid', read_only=True)
+    doctor_name = serializers.CharField(source='doctor.full_name', read_only=True)
+    doctor_image = serializers.SerializerMethodField()
+    doctor_specialization = serializers.CharField(source='doctor.specialization', read_only=True)
+    appointment_sid = serializers.CharField(source='appointment.sid', read_only=True)
+    appointment_date = serializers.DateTimeField(source='appointment.date', read_only=True)
+
+    class Meta:
+        model = Review
+        fields = (
+            'sid', 'rating', 'comment', 'created_at',
+            'patient_name', 'patient_image',
+            'doctor_sid', 'doctor_name', 'doctor_image', 'doctor_specialization',
+            'appointment_sid', 'appointment_date',
+        )
+
+    def get_patient_name(self, obj):
+        return obj.patient.full_name
+
+    def get_patient_image(self, obj):
+        if obj.patient.image and hasattr(obj.patient.image, 'url'):
+            return obj.patient.image.url
+        return None
+
+    def get_doctor_image(self, obj):
+        if obj.doctor.image and hasattr(obj.doctor.image, 'url'):
+            return obj.doctor.image.url
+        return None
+
+
+class ReviewCreateSerializer(serializers.Serializer):
+    """Payload for creating or updating a review. The patient is inferred
+    from the request; the doctor is inferred from the appointment."""
+    appointment_sid = serializers.CharField()
+    rating = serializers.IntegerField(min_value=1, max_value=5)
+    comment = serializers.CharField(required=False, allow_blank=True, max_length=1000, default='')
+
+
+class PendingReviewAppointmentSerializer(serializers.ModelSerializer):
+    """Completed consultation appointments the patient has NOT reviewed yet."""
+    doctor_sid = serializers.SerializerMethodField()
+    doctor_name = serializers.SerializerMethodField()
+    doctor_image = serializers.SerializerMethodField()
+    doctor_specialization = serializers.SerializerMethodField()
+    service_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Appointment
+        fields = (
+            'sid', 'date',
+            'doctor_sid', 'doctor_name', 'doctor_image', 'doctor_specialization',
+            'service_name',
+        )
+
+    def get_doctor_sid(self, obj):
+        return obj.doctor.sid if obj.doctor else None
+
+    def get_doctor_name(self, obj):
+        return obj.doctor.full_name if obj.doctor else None
+
+    def get_doctor_image(self, obj):
+        if obj.doctor and obj.doctor.image and hasattr(obj.doctor.image, 'url'):
+            return obj.doctor.image.url
+        return None
+
+    def get_doctor_specialization(self, obj):
+        return obj.doctor.specialization if obj.doctor else None
+
+    def get_service_name(self, obj):
+        return obj.service.name if obj.service else None

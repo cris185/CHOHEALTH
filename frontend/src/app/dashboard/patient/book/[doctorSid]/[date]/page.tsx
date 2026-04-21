@@ -10,6 +10,7 @@ import PatientDayTimeline from '@/components/booking/PatientDayTimeline';
 import BookingModal from '@/components/booking/BookingModal';
 import { useBfcacheRefetch } from '@/hooks/useBfcacheRefetch';
 import InitialsAvatar, { resolveImageUrl } from '@/components/InitialsAvatar';
+import StarRating from '@/components/StarRating';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -134,6 +135,14 @@ export default function DayBookingPage() {
           <div className="min-w-0 flex-1">
             <h2 className="font-semibold text-gray-900">Dr. {selectedDoctor.full_name}</h2>
             <p className="text-sm text-gray-500">{selectedDoctor.specialization}</p>
+            {selectedDoctor.total_reviews > 0 && (
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <StarRating value={Number(selectedDoctor.average_rating)} size="sm" />
+                <span className="text-xs text-gray-600">
+                  {Number(selectedDoctor.average_rating).toFixed(1)} ({selectedDoctor.total_reviews})
+                </span>
+              </div>
+            )}
             <p className="text-sm text-gray-500">{service.name} &middot; {service.duration_minutes} min &middot; ${service.cost}</p>
           </div>
         </div>

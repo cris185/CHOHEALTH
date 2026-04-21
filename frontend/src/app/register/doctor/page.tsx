@@ -11,6 +11,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
+import PasswordStrength from '@/components/PasswordStrength';
+import PhoneInput from '@/components/PhoneInput';
+import CountrySelect from '@/components/CountrySelect';
 
 export default function DoctorRegisterPage() {
   const { registerDoctor } = useAuth();
@@ -92,11 +95,11 @@ export default function DoctorRegisterPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="mobile">{t('register.doctor.mobile')}</Label>
-                  <Input id="mobile" name="mobile" value={form.mobile} onChange={handleChange} placeholder="+1 234 567 8900" />
+                  <PhoneInput value={form.mobile} onChange={(v) => setForm({ ...form, mobile: v })} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="country">{t('register.doctor.country')}</Label>
-                  <Input id="country" name="country" value={form.country} onChange={handleChange} placeholder={t('register.doctor.countryPlaceholder')} />
+                  <CountrySelect value={form.country} onChange={(v) => setForm({ ...form, country: v })} placeholder={t('register.doctor.countryPlaceholder')} />
                 </div>
               </div>
 
@@ -120,6 +123,7 @@ export default function DoctorRegisterPage() {
                 <div className="space-y-2">
                   <Label htmlFor="password">{t('common.password')} *</Label>
                   <Input id="password" name="password" type="password" required minLength={8} value={form.password} onChange={handleChange} placeholder={t('register.doctor.minChars')} />
+                  <PasswordStrength password={form.password} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password_confirm">{t('common.confirmPassword')} *</Label>

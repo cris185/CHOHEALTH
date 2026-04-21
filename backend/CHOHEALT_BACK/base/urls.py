@@ -24,6 +24,10 @@ from .delivery_views import (
     PrescriptionDeliveryCreateView, MedicineDeliveryTrackingView,
     PatientDeliveryListView,
 )
+from .review_views import (
+    DoctorReviewsListView, MyReviewsListView, AllReviewsListView,
+    PendingReviewsListView, ReviewCreateOrUpdateView, ReviewDeleteView,
+)
 
 urlpatterns = [
     path('services/', ServiceListView.as_view(), name='service-list'),
@@ -65,4 +69,12 @@ urlpatterns = [
     path('prescriptions/<str:sid>/delivery/', PrescriptionDeliveryCreateView.as_view(), name='prescription-delivery-create'),
     path('medicine-orders/<str:sid>/tracking/', MedicineDeliveryTrackingView.as_view(), name='medicine-order-tracking'),
     path('deliveries/', PatientDeliveryListView.as_view(), name='patient-delivery-list'),
+
+    # Reviews (doctor ratings)
+    path('reviews/', ReviewCreateOrUpdateView.as_view(), name='review-create'),
+    path('reviews/mine/', MyReviewsListView.as_view(), name='review-mine'),
+    path('reviews/all/', AllReviewsListView.as_view(), name='review-all'),
+    path('reviews/pending/', PendingReviewsListView.as_view(), name='review-pending'),
+    path('reviews/doctor/<str:sid>/', DoctorReviewsListView.as_view(), name='review-by-doctor'),
+    path('reviews/<str:sid>/', ReviewDeleteView.as_view(), name='review-delete'),
 ]

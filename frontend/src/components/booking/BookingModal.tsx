@@ -203,9 +203,14 @@ export default function BookingModal({
                 className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500">
                 <option value="">{t('booking.selectBranch')}</option>
                 {branchesList.map((b) => (
-                  <option key={b.sid} value={b.sid}>{b.name} - {b.address}</option>
+                  <option key={b.sid} value={b.sid}>{b.name}</option>
                 ))}
               </select>
+              {branchSid && (
+                <p className="mt-1.5 text-xs text-gray-500">
+                  {branchesList.find((b) => b.sid === branchSid)?.address}
+                </p>
+              )}
             </div>
           )}
 

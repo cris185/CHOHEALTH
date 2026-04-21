@@ -135,6 +135,7 @@
   },
   "services": {
     "title": "Our Services",
+    "quickBooking": "Quick Booking",
     "doctorsAvailable": "Doctors Available",
     "duration": "min",
     "bookAppointment": "Book Appointment",
@@ -236,6 +237,7 @@
         "labs": "Labs",
         "deliveries": "My Deliveries",
         "notifications": "Notifications",
+        "reviews": "Reviews",
         "payments": "Payments",
         "profile": "Profile"
       },
@@ -533,5 +535,32 @@
       "userType": "User Type",
       "sid": "SID"
     }
+  },
+  "reviews": {
+    "pageTitle": "Doctor Reviews",
+    "tabPending": "Pending",
+    "tabMine": "My Reviews",
+    "tabCommunity": "All Reviews",
+    "emptyPending": "You have no pending ratings. Complete an appointment to rate your doctor.",
+    "emptyMine": "You haven't rated any doctors yet.",
+    "emptyCommunity": "No reviews yet.",
+    "rate": "Rate",
+    "update": "Update",
+    "submit": "Submit",
+    "submitting": "Submitting...",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "modalTitle": "Rate your visit",
+    "howManyStars": "How would you rate your experience?",
+    "commentLabel": "Share your experience (optional)",
+    "commentPlaceholder": "Tell other patients about your visit...",
+    "confirmDeleteTitle": "Delete this review?",
+    "confirmDeleteDescription": "This action cannot be undone.",
+    "errorRating": "Please select a star rating.",
+    "errorAuth": "You must be logged in.",
+    "errorSubmit": "Could not save your review. Please try again.",
+    "rateCta": "Rate doctor",
+    "editCta": "Edit your review",
+    "newReviews": "({count}) new"
   }
 }

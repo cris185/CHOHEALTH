@@ -48,16 +48,16 @@ export default function DoctorSidebar() {
   };
 
   return (
-    <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col">
+    <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col sticky top-16 h-[calc(100vh-4rem)]">
       {/* Brand */}
-      <div className="flex items-center gap-2.5 px-5 py-4">
-        <Image src="/logo.png" alt="CHO Health" width={200} height={70} className="h-18 w-auto" />
+      <div className="flex h-24 items-center justify-center px-5">
+        <Image src="/logo.png" alt="CHO Health" width={480} height={160} className="h-20 w-auto" priority />
       </div>
 
       <Separator />
 
       {/* Main Navigation */}
-      <div className="flex-1 px-4 py-4">
+      <div className="flex-1 overflow-y-auto px-4 py-4">
         <p className="mb-2 px-4 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/60">Main</p>
         <nav className="space-y-1">
           {mainNav.map(renderNavItem)}

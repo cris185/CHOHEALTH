@@ -191,10 +191,10 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="border-t bg-card py-8">
+      <footer className="border-t bg-card py-10">
         <div className="mx-auto max-w-7xl px-4">
-          <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
-            <Image src="/logo.png" alt="CHO Health" width={180} height={60} className="h-16 w-auto" />
+          <div className="flex flex-col items-center justify-between gap-6 sm:flex-row">
+            <Image src="/logo.png" alt="CHO Health" width={280} height={90} className="h-20 w-auto" />
             <p className="text-sm text-muted-foreground">
               &copy; {new Date().getFullYear()} {t('common.appName')}. {t('home.footerCopyright')}
             </p>

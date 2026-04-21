@@ -134,7 +134,8 @@
     }
   },
   "services": {
-    "title": "Our Services",
+    "title": "Nuestros servicios",
+    "quickBooking": "Agendamiento rápido",
     "doctorsAvailable": "Doctors Available",
     "duration": "min",
     "bookAppointment": "Book Appointment",
@@ -236,6 +237,7 @@
         "labs": "Laboratorios",
         "deliveries": "Mis env\u00edos",
         "notifications": "Notificaciones",
+        "reviews": "Rese\u00f1as",
         "payments": "Pagos",
         "profile": "Perfil"
       },
@@ -533,5 +535,32 @@
       "userType": "User Type",
       "sid": "SID"
     }
+  },
+  "reviews": {
+    "pageTitle": "Rese\u00f1as de doctores",
+    "tabPending": "Pendientes",
+    "tabMine": "Mis rese\u00f1as",
+    "tabCommunity": "Todas las rese\u00f1as",
+    "emptyPending": "No tienes rese\u00f1as pendientes. Completa una cita para calificar a tu doctor.",
+    "emptyMine": "A\u00fan no has calificado a ning\u00fan doctor.",
+    "emptyCommunity": "A\u00fan no hay rese\u00f1as.",
+    "rate": "Calificar",
+    "update": "Actualizar",
+    "submit": "Enviar",
+    "submitting": "Enviando...",
+    "cancel": "Cancelar",
+    "delete": "Eliminar",
+    "modalTitle": "Califica tu visita",
+    "howManyStars": "\u00bfC\u00f3mo calificar\u00edas tu experiencia?",
+    "commentLabel": "Comparte tu experiencia (opcional)",
+    "commentPlaceholder": "Cu\u00e9ntales a otros pacientes sobre tu visita...",
+    "confirmDeleteTitle": "\u00bfEliminar esta rese\u00f1a?",
+    "confirmDeleteDescription": "Esta acci\u00f3n no se puede deshacer.",
+    "errorRating": "Por favor selecciona una calificaci\u00f3n.",
+    "errorAuth": "Debes iniciar sesi\u00f3n.",
+    "errorSubmit": "No se pudo guardar tu rese\u00f1a. Int\u00e9ntalo de nuevo.",
+    "rateCta": "Calificar doctor",
+    "editCta": "Editar tu rese\u00f1a",
+    "newReviews": "({count}) nuevas"
   }
 }

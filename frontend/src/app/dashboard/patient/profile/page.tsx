@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Separator } from '@/components/ui/separator';
 import { User, Camera, Loader2, CheckCircle } from 'lucide-react';
+import PhoneInput from '@/components/PhoneInput';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -133,7 +134,7 @@ export default function PatientProfilePage() {
               <div className="space-y-2"><Label>{t('common.firstLastName')} *</Label><Input name="first_last_name" required value={form.first_last_name} onChange={handleChange} /></div>
               <div className="space-y-2"><Label>{t('common.secondLastName')}</Label><Input name="second_last_name" value={form.second_last_name} onChange={handleChange} /></div>
             </div>
-            <div className="space-y-2"><Label>Phone</Label><Input name="phone" value={form.phone} onChange={handleChange} /></div>
+            <div className="space-y-2"><Label>Phone</Label><PhoneInput value={form.phone} onChange={(v) => setForm({ ...form, phone: v })} /></div>
             <div className="space-y-2"><Label>Address</Label><Input name="address" value={form.address} onChange={handleChange} /></div>
 
             <div className="grid grid-cols-3 gap-4">

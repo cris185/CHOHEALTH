@@ -11,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
 import Image from 'next/image';
+import PasswordStrength from '@/components/PasswordStrength';
 
 export default function ResetPasswordPage() {
   const t = useTranslations();
@@ -103,6 +104,7 @@ export default function ResetPasswordPage() {
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="Min. 8 characters"
                   />
+                  <PasswordStrength password={newPassword} />
                 </div>
 
                 <div className="space-y-2">

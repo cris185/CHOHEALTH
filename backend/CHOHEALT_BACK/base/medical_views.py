@@ -247,6 +247,20 @@ class DoctorAppointmentCompleteView(APIView):
             )
         _notify(appointment.patient.user, title, title, message, appointment)
 
+        # Invite the patient to rate the doctor. Only for consultations —
+        # lab-staff ratings will land in a later phase.
+        if appointment.service_id and not appointment.lab_test_id:
+            _notify(
+                appointment.patient.user,
+                'Rate Doctor',
+                'How was your visit?',
+                (
+                    f'Share your experience with Dr. {request.user.doctor.first_name} '
+                    f'{request.user.doctor.first_last_name}. Your feedback helps other patients.'
+                ),
+                appointment,
+            )
+
         return Response(
             {
                 'detail': 'Appointment completed.',

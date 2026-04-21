@@ -168,6 +168,8 @@ export interface ServiceDoctor {
   qualifications: DoctorQualificationItem[];
   years_of_experience: number;
   bio: string;
+  average_rating: string;
+  total_reviews: number;
 }
 
 export interface Service {
@@ -1081,6 +1083,61 @@ export const patientPayments = {
 
   stats: (token: string): Promise<PatientPaymentStats> =>
     fetchAPI('/patient/payments/stats/', { token }),
+};
+
+// ============================================================================
+// Reviews (doctor ratings)
+// ============================================================================
+
+export interface ReviewItem {
+  sid: string;
+  rating: number;
+  comment: string;
+  created_at: string;
+  patient_name: string;
+  patient_image: string | null;
+  doctor_sid: string;
+  doctor_name: string;
+  doctor_image: string | null;
+  doctor_specialization: string;
+  appointment_sid: string;
+  appointment_date: string;
+}
+
+export interface PendingReviewAppointment {
+  sid: string;
+  date: string;
+  doctor_sid: string | null;
+  doctor_name: string | null;
+  doctor_image: string | null;
+  doctor_specialization: string | null;
+  service_name: string | null;
+}
+
+export interface ReviewCreatePayload {
+  appointment_sid: string;
+  rating: number;
+  comment?: string;
+}
+
+export const reviews = {
+  byDoctor: (doctorSid: string): Promise<ReviewItem[]> =>
+    fetchAPI(`/reviews/doctor/${doctorSid}/`),
+
+  mine: (token: string): Promise<ReviewItem[]> =>
+    fetchAPI('/reviews/mine/', { token }),
+
+  all: (token: string): Promise<ReviewItem[]> =>
+    fetchAPI('/reviews/all/', { token }),
+
+  pending: (token: string): Promise<PendingReviewAppointment[]> =>
+    fetchAPI('/reviews/pending/', { token }),
+
+  createOrUpdate: (payload: ReviewCreatePayload, token: string): Promise<ReviewItem> =>
+    fetchAPI('/reviews/', { method: 'POST', body: JSON.stringify(payload), token }),
+
+  delete: (sid: string, token: string) =>
+    fetchAPI(`/reviews/${sid}/`, { method: 'DELETE', token }),
 };
 
 // ============================================================================
