@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { auth } from '@/lib/api';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Loader2, CheckCircle, AlertTriangle } from 'lucide-react';
@@ -95,9 +96,8 @@ export default function ResetPasswordPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="new_password">{t('resetPassword.newPassword')}</Label>
-                  <Input
+                  <PasswordInput
                     id="new_password"
-                    type="password"
                     required
                     minLength={8}
                     value={newPassword}
@@ -109,9 +109,8 @@ export default function ResetPasswordPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="confirm_password">{t('resetPassword.confirmPassword')}</Label>
-                  <Input
+                  <PasswordInput
                     id="confirm_password"
-                    type="password"
                     required
                     minLength={8}
                     value={confirmPassword}

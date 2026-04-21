@@ -51,36 +51,17 @@ export default function NotificationBell() {
         {recent.length === 0 ? (
           <div className="px-3 py-6 text-center text-sm text-muted-foreground">No notifications</div>
         ) : (
-          recent.map((n) => {
-            // Deeplink "Rate Doctor" notifications straight into the reviews
-            // page so the patient doesn't have to hunt for the sidebar entry.
-            const href =
-              n.type === 'Rate Doctor' && user?.user_type === 'Patient'
-                ? '/dashboard/patient/reviews'
-                : null;
-
-            const content = (
-              <>
+          recent.map((n) => (
+            <Link key={n.sid} href={`${dashboardPath}/notifications`} className="block">
+              <DropdownMenuItem className="flex flex-col items-start gap-1 px-3 py-2.5 cursor-pointer">
                 <div className="flex items-center gap-2 w-full">
                   {!n.is_read && <span className="h-2 w-2 shrink-0 rounded-full bg-primary" />}
                   <span className="text-sm font-medium">{n.type}</span>
                 </div>
                 <p className="text-xs text-muted-foreground line-clamp-1 pl-4">{n.message}</p>
-              </>
-            );
-
-            return href ? (
-              <Link key={n.sid} href={href} className="block">
-                <DropdownMenuItem className="flex flex-col items-start gap-1 px-3 py-2.5 cursor-pointer">
-                  {content}
-                </DropdownMenuItem>
-              </Link>
-            ) : (
-              <DropdownMenuItem key={n.sid} className="flex flex-col items-start gap-1 px-3 py-2.5 cursor-pointer">
-                {content}
               </DropdownMenuItem>
-            );
-          })
+            </Link>
+          ))
         )}
 
         <DropdownMenuSeparator />

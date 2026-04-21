@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardFooter } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
+import { PasswordInput } from '@/components/ui/password-input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -132,12 +133,12 @@ export default function PatientRegisterPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="password">{t('common.password')} *</Label>
-                  <Input id="password" name="password" type="password" required minLength={8} value={form.password} onChange={handleChange} placeholder={t('register.patient.minChars')} />
+                  <PasswordInput id="password" name="password" required minLength={8} value={form.password} onChange={handleChange} placeholder={t('register.patient.minChars')} />
                   <PasswordStrength password={form.password} />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password_confirm">{t('common.confirmPassword')} *</Label>
-                  <Input id="password_confirm" name="password_confirm" type="password" required minLength={8} value={form.password_confirm} onChange={handleChange} placeholder="********" />
+                  <PasswordInput id="password_confirm" name="password_confirm" required minLength={8} value={form.password_confirm} onChange={handleChange} placeholder="********" />
                 </div>
               </div>
             </CardContent>

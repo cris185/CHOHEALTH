@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -8,6 +9,7 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
 import { Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Pill, TestTubes, Truck, Star } from 'lucide-react';
+import { reviews as reviewsApi } from '@/lib/api';
 
 const mainNav = [
   { key: 'dashboard', href: '/dashboard/patient', icon: Home, exact: true },
@@ -35,10 +37,20 @@ export default function PatientSidebar() {
   const t = useTranslations();
   const pathname = usePathname();
   const { logout } = useAuth();
+  const [pendingReviews, setPendingReviews] = useState(0);
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    reviewsApi.pending(token)
+      .then((data) => setPendingReviews(data.length))
+      .catch(() => {});
+  }, [pathname]);
 
   const renderNavItem = (item: { key: string; href: string; icon: React.ElementType; exact?: boolean }) => {
     const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
     const Icon = item.icon;
+    const hasPendingReviews = item.key === 'reviews' && pendingReviews > 0;
 
     return (
       <Link key={item.key} href={item.href}>
@@ -46,10 +58,27 @@ export default function PatientSidebar() {
           'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
           isActive
             ? 'bg-primary text-primary-foreground shadow-sm'
-            : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            : hasPendingReviews
+              ? 'bg-amber-50 text-amber-900 hover:bg-amber-100'
+              : 'text-muted-foreground hover:bg-muted hover:text-foreground'
         )}>
-          <Icon className={cn('h-5 w-5', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
-          {t(`dashboard.patient.nav.${item.key}`)}
+          <Icon className={cn(
+            'h-5 w-5',
+            isActive
+              ? 'text-primary-foreground'
+              : hasPendingReviews
+                ? 'text-amber-500 fill-amber-400 animate-pulse'
+                : 'text-muted-foreground'
+          )} />
+          <span className="flex-1">{t(`dashboard.patient.nav.${item.key}`)}</span>
+          {hasPendingReviews && (
+            <span className={cn(
+              'flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10px] font-bold',
+              isActive ? 'bg-white text-primary' : 'bg-amber-500 text-white animate-pulse'
+            )}>
+              {pendingReviews}
+            </span>
+          )}
         </div>
       </Link>
     );
