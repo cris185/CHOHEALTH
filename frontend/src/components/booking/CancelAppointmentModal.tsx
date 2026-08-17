@@ -75,7 +75,7 @@ export default function CancelAppointmentModal({
         <div className="border-b p-4">
           <h2 className="text-lg font-bold text-gray-900">Cancel Appointment</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            {new Date(appointmentDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+            {new Date(appointmentDate).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })}
           </p>
         </div>
 

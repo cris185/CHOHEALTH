@@ -152,10 +152,11 @@ export default function LabsPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">
-                          {new Date(order.ordered_at).toLocaleDateString(undefined, {
+                          {new Date(order.ordered_at).toLocaleDateString('en-US', {
                             month: 'short',
                             day: 'numeric',
                             year: 'numeric',
+                            timeZone: 'America/New_York',
                           })}
                         </span>
                         <span className="rounded border border-slate-200 bg-slate-50 px-1.5 py-0.5 font-mono text-[10px] text-slate-600">

@@ -191,7 +191,7 @@ export default function PatientAppointmentsPage() {
                 {filtered.map((a) => (
                   <TableRow key={a.sid}>
                     <TableCell className="font-medium">
-                      {new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {new Date(a.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })}
                     </TableCell>
                     <TableCell>{a.doctor_name}</TableCell>
                     <TableCell>{a.service_name || '-'}</TableCell>
@@ -335,7 +335,7 @@ export default function PatientAppointmentsPage() {
           target={{ kind: 'appointment', appointmentSid: payTarget.sid }}
           amount={payTarget.service_cost}
           serviceName={payTarget.service_name || 'Appointment'}
-          subtitle={new Date(payTarget.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+          subtitle={new Date(payTarget.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })}
           onSuccess={handlePaymentSuccess}
         />
       )}
@@ -349,7 +349,7 @@ export default function PatientAppointmentsPage() {
             <div className="p-4 space-y-3">
               <p className="text-sm text-gray-600">
                 This will permanently remove your unpaid appointment with <strong>{deleteTarget.doctor_name}</strong> on{' '}
-                <strong>{new Date(deleteTarget.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</strong>.
+                <strong>{new Date(deleteTarget.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })}</strong>.
               </p>
               <p className="text-xs text-gray-500">
                 No payment was charged, so nothing will be refunded. You can book a new appointment anytime.

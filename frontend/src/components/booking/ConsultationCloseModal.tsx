@@ -248,12 +248,13 @@ export default function ConsultationCloseModal({
 
   if (!isOpen) return null;
 
-  const formattedDate = new Date(appointmentDate).toLocaleDateString(undefined, {
+  const formattedDate = new Date(appointmentDate).toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'America/New_York',
   });
 
   return (

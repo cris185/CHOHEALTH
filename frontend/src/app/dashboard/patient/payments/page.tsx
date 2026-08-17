@@ -118,7 +118,7 @@ export default function PatientPaymentsPage() {
                     <TableCell className="text-muted-foreground">{p.invoice_number}</TableCell>
                     <TableCell className="font-semibold">${p.amount}</TableCell>
                     <TableCell className="capitalize">{p.payment_method}</TableCell>
-                    <TableCell>{p.paid_at ? new Date(p.paid_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : '-'}</TableCell>
+                    <TableCell>{p.paid_at ? new Date(p.paid_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' }) : '-'}</TableCell>
                     <TableCell><Badge variant="outline" className={statusVariant[p.status] || ''}>{p.status}</Badge></TableCell>
                   </TableRow>
                 ))}

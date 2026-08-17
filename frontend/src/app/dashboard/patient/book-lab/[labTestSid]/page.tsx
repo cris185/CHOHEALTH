@@ -18,6 +18,7 @@ import PatientDayTimeline from '@/components/booking/PatientDayTimeline';
 import BookLabModal from '@/components/booking/BookLabModal';
 import InitialsAvatar, { resolveImageUrl } from '@/components/InitialsAvatar';
 import { useBfcacheRefetch } from '@/hooks/useBfcacheRefetch';
+import { getNYYearMonthDay } from '@/lib/tz';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -37,9 +38,9 @@ export default function BookLabPage() {
   const [labTest, setLabTest] = useState<LabTestDetail | null>(null);
   const [selectedStaff, setSelectedStaff] = useState<LabStaffItem | null>(null);
 
-  const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth());
+  const nyNow = getNYYearMonthDay();
+  const [calYear, setCalYear] = useState(nyNow.year);
+  const [calMonth, setCalMonth] = useState(nyNow.month);
   const [availableDays, setAvailableDays] = useState<DayInfo[]>([]);
   const [calLoading, setCalLoading] = useState(false);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);

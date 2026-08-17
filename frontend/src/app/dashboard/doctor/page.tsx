@@ -18,6 +18,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Input } from '@/components/ui/input';
+import { getTodayInNY } from '@/lib/tz';
 import DoctorDayCalendar from '@/components/booking/DoctorDayCalendar';
 import AppointmentDetailModal from '@/components/booking/AppointmentDetailModal';
 import { CalendarDays, Clock, CheckCircle, Archive, Users, Star, DollarSign, Bell, Activity, Stethoscope } from 'lucide-react';
@@ -39,7 +40,7 @@ export default function DoctorDashboard() {
   const router = useRouter();
 
   const [stats, setStats] = useState<DoctorStats | null>(null);
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => getTodayInNY());
   const [appts, setAppts] = useState<DoctorAppointmentItem[]>([]);
   const [schedule, setSchedule] = useState<DoctorScheduleEntry | null>(null);
   const [apptLoading, setApptLoading] = useState(true);
@@ -183,7 +184,7 @@ export default function DoctorDashboard() {
                 </CardTitle>
                 <div className="flex items-center gap-2">
                   <Input type="date" value={selectedDate} onChange={(e) => setSelectedDate(e.target.value)} className="w-auto h-8 text-xs" />
-                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setSelectedDate(new Date().toISOString().split('T')[0])}>
+                  <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => setSelectedDate(getTodayInNY())}>
                     {t('booking.today')}
                   </Button>
                 </div>

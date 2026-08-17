@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { doctors as doctorsApi, DayInfo, DayAvailability } from '@/lib/api';
+import { getNYYearMonthDay } from '@/lib/tz';
 import MonthCalendar from './MonthCalendar';
 
 interface RescheduleModalProps {
@@ -25,9 +26,9 @@ export default function RescheduleModal({
   isOpen, onClose, appointmentSid, doctorSid, serviceSid, currentDate, onReschedule, title,
 }: RescheduleModalProps) {
   const t = useTranslations();
-  const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth());
+  const nyNow = getNYYearMonthDay();
+  const [calYear, setCalYear] = useState(nyNow.year);
+  const [calMonth, setCalMonth] = useState(nyNow.month);
   const [days, setDays] = useState<DayInfo[]>([]);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [daySlots, setDaySlots] = useState<DayAvailability | null>(null);
@@ -40,9 +41,9 @@ export default function RescheduleModal({
   // Reset on close
   useEffect(() => {
     if (!isOpen) {
-      const today = new Date();
-      setCalYear(today.getFullYear());
-      setCalMonth(today.getMonth());
+      const today = getNYYearMonthDay();
+      setCalYear(today.year);
+      setCalMonth(today.month);
       setDays([]);
       setSelectedDate(null);
       setDaySlots(null);
@@ -107,7 +108,7 @@ export default function RescheduleModal({
   };
 
   const currentDateFormatted = new Date(currentDate).toLocaleDateString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+    weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York',
   });
 
   return (

@@ -230,7 +230,7 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointmentSid
               <div className="flex items-center justify-between">
                 <span className="text-gray-500">Date & Time</span>
                 <span className="font-medium text-gray-900">
-                  {new Date(detail.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {new Date(detail.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })}
                 </span>
               </div>
               <div className="flex items-center justify-between">

@@ -122,7 +122,7 @@ export default function PatientNotificationsPage() {
                     <p className="text-sm font-semibold">{n.type}</p>
                     <p className="mt-1 text-sm text-muted-foreground">{n.message}</p>
                     <p className="mt-1 text-xs text-muted-foreground">
-                      {new Date(n.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      {new Date(n.created_at).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })}
                     </p>
                   </div>
                 </div>

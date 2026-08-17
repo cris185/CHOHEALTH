@@ -102,8 +102,8 @@ export default function PatientDeliveriesPage() {
                             <span className="truncate">{d.address}</span>
                           </p>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">
-                            {new Date(d.created_at).toLocaleDateString(undefined, {
-                              month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit',
+                            {new Date(d.created_at).toLocaleDateString('en-US', {
+                              month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York',
                             })}
                             {d.origin_branch && ` · ${d.origin_branch}`}
                           </p>

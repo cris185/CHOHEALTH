@@ -8,6 +8,7 @@ import { useAuth } from '@/context/AuthContext';
 import { doctors as doctorsApi, services as servicesApi, Service, DayInfo } from '@/lib/api';
 import MonthCalendar from '@/components/booking/MonthCalendar';
 import InitialsAvatar, { resolveImageUrl } from '@/components/InitialsAvatar';
+import { getNYYearMonthDay } from '@/lib/tz';
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace('/api', '') || '';
 
@@ -22,9 +23,9 @@ export default function BookingPage() {
   const [service, setService] = useState<Service | null>(null);
   const [selectedDoctor, setSelectedDoctor] = useState<Service['doctors'][0] | null>(null);
 
-  const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth());
+  const nyNow = getNYYearMonthDay();
+  const [calYear, setCalYear] = useState(nyNow.year);
+  const [calMonth, setCalMonth] = useState(nyNow.month);
   const [availableDays, setAvailableDays] = useState<DayInfo[]>([]);
   const [calLoading, setCalLoading] = useState(true);
   const [selectedDate, setSelectedDate] = useState<string | null>(null);

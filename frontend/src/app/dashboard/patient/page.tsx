@@ -175,7 +175,7 @@ export default function PatientDashboard() {
                         </div>
                         <div className="min-w-0">
                           <p className="text-sm font-medium truncate">{appt.doctor_name}</p>
-                          <p className="text-xs text-muted-foreground">{appt.service_name} &middot; {new Date(appt.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+                          <p className="text-xs text-muted-foreground">{appt.service_name} &middot; {new Date(appt.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York' })}</p>
                         </div>
                       </div>
                       <Badge variant="outline" className={`shrink-0 ${statusVariant[appt.status] || ''}`}>{appt.status}</Badge>

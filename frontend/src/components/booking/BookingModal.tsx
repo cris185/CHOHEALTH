@@ -61,8 +61,8 @@ export default function BookingModal({
   if (!isOpen) return null;
 
   const dateTime = `${date}T${time}:00`;
-  const formattedDate = new Date(dateTime).toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  const formattedDate = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York',
   });
 
   const handleCreateAppointment = async (e: React.FormEvent<HTMLFormElement>) => {

@@ -128,11 +128,13 @@ export default function PatientAppointmentDetailModal({
                   month: 'long',
                   day: 'numeric',
                   year: 'numeric',
+                  timeZone: 'America/New_York',
                 })}
                 {' · '}
                 {appointmentDate.toLocaleTimeString('en-US', {
                   hour: '2-digit',
                   minute: '2-digit',
+                  timeZone: 'America/New_York',
                 })}
               </p>
             </div>

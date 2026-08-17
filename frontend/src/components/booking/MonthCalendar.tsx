@@ -2,6 +2,7 @@
 
 import { useTranslations } from 'next-intl';
 import type { DayInfo } from '@/lib/api';
+import { getTodayInNY } from '@/lib/tz';
 
 interface MonthCalendarProps {
   year: number;
@@ -31,7 +32,7 @@ export default function MonthCalendar({
 
   const firstDay = new Date(year, month, 1).getDay();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayInNY();
 
   const dayInfoMap = new Map(availableDays.map((d) => [d.date, d]));
 

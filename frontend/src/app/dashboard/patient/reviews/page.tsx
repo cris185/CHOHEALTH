@@ -207,7 +207,7 @@ function PendingList({
                     {p.service_name ? ` · ${p.service_name}` : ''}
                   </p>
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {new Date(p.date).toLocaleDateString()}
+                    {new Date(p.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}
                   </p>
                 </div>
               </div>
@@ -281,7 +281,7 @@ function ReviewCard({
                 <StarRating value={review.rating} size="sm" />
               </div>
               <p className="text-xs text-muted-foreground">
-                {new Date(review.created_at).toLocaleDateString()}
+                {new Date(review.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}
               </p>
               {review.comment && (
                 <p className="mt-2 text-sm whitespace-pre-wrap">{review.comment}</p>

@@ -272,7 +272,7 @@ export default function MedicinePage() {
                       <CardTitle className="text-sm">{t('issuedBy')}: {record.doctor_name || '—'}</CardTitle>
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-muted-foreground">
-                          {new Date(record.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                          {new Date(record.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}
                         </span>
                         {record.prescription && (
                           <>
@@ -481,7 +481,7 @@ export default function MedicinePage() {
                         </div>
                       </div>
                       <p className="text-xs text-muted-foreground">
-                        {t('orderDate')}: {new Date(order.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                        {t('orderDate')}: {new Date(order.created_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York' })}
                       </p>
                       {/* Pickup QR — only for paid orders that have a code */}
                       {order.pickup_code && !isPending && (

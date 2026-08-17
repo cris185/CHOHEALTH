@@ -50,8 +50,8 @@ export default function DoctorDayCalendar({
 }: DoctorDayCalendarProps) {
   const t = useTranslations();
 
-  const formattedDate = new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+  const formattedDate = new Date(date + 'T12:00:00Z').toLocaleDateString('en-US', {
+    weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York',
   });
 
   const startMin = timeToMinutes(scheduleStart);

@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import DoctorDayCalendar from '@/components/booking/DoctorDayCalendar';
 import AppointmentDetailModal from '@/components/booking/AppointmentDetailModal';
 import { CalendarDays } from 'lucide-react';
+import { getTodayInNY, getNYYearMonthDay } from '@/lib/tz';
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
@@ -19,10 +20,10 @@ export default function DoctorAppointmentsPage() {
   const t = useTranslations();
   const router = useRouter();
 
-  const now = new Date();
-  const [calYear, setCalYear] = useState(now.getFullYear());
-  const [calMonth, setCalMonth] = useState(now.getMonth());
-  const [selectedDate, setSelectedDate] = useState<string>(now.toISOString().split('T')[0]);
+  const nyNow = getNYYearMonthDay();
+  const [calYear, setCalYear] = useState(nyNow.year);
+  const [calMonth, setCalMonth] = useState(nyNow.month);
+  const [selectedDate, setSelectedDate] = useState<string>(getTodayInNY());
 
   const [monthAppts, setMonthAppts] = useState<DoctorAppointmentItem[]>([]);
   const [monthLoading, setMonthLoading] = useState(true);
@@ -101,7 +102,7 @@ export default function DoctorAppointmentsPage() {
   // Calendar rendering
   const firstDay = new Date(calYear, calMonth, 1).getDay();
   const daysInMonth = new Date(calYear, calMonth + 1, 0).getDate();
-  const today = new Date().toISOString().split('T')[0];
+  const today = getTodayInNY();
 
   const cells = [];
   for (let i = 0; i < firstDay; i++) {
@@ -159,10 +160,10 @@ export default function DoctorAppointmentsPage() {
           <h2 className="text-2xl font-bold tracking-tight">{t('dashboard.doctor.nav.appointments')}</h2>
         </div>
         <Button variant="outline" size="sm" onClick={() => {
-          const todayDate = new Date();
-          setCalYear(todayDate.getFullYear());
-          setCalMonth(todayDate.getMonth());
-          setSelectedDate(todayDate.toISOString().split('T')[0]);
+          const ny = getNYYearMonthDay();
+          setCalYear(ny.year);
+          setCalMonth(ny.month);
+          setSelectedDate(getTodayInNY());
         }}>
           {t('booking.today')}
         </Button>
@@ -230,8 +231,8 @@ export default function DoctorAppointmentsPage() {
                 <div className="flex items-center justify-between mb-4">
                   <div>
                     <h3 className="text-lg font-semibold text-gray-900">
-                      {new Date(selectedDate + 'T00:00:00').toLocaleDateString('en-US', {
-                        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric',
+                      {new Date(selectedDate + 'T12:00:00Z').toLocaleDateString('en-US', {
+                        weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'America/New_York',
                       })}
                     </h3>
                     <p className="text-sm text-muted-foreground">
