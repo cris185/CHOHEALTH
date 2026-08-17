@@ -73,10 +73,13 @@ The rules below are enforced in code (model constraints, `clean()` validators, o
 - A prescription line can point to a catalog medication or be free text — a doctor is not blocked from prescribing something outside the hospital's own formulary.
 
 **Pharmacy and prescription fulfillment**
-- Medications and lab tests each declare, independently, whether they require a prescription and whether they are free when prescribed — a patient can always buy an over-the-counter item directly, or claim a prescribed item at no cost, but never mix the two for the same unit.
-- A prescribed medication (or lab test) can be claimed at most once across all non-cancelled orders — enforced with a one-to-one link between the order line and the source prescription item, preventing the same prescription from being dispensed twice through parallel pickup/delivery paths.
+- Medications and lab tests each declare, independently, two flags: `requires_prescription` and `free_when_prescribed`. If `requires_prescription` is `False`, a patient can buy or book the item directly, with no doctor involved. If it's `True`, the purchase or booking endpoint requires an unclaimed prescription item for that exact medication or lab test — issued earlier by a doctor through a completed appointment (`MedicalRecord` → `Prescription`/`LabOrder`) — and returns `403` otherwise. There is no way to acquire a prescription-gated item without that prior visit.
+- Pricing for a prescription-gated item is `$0` only when it is backed by an unclaimed prescription item **and** the catalog entry has `free_when_prescribed = True` (the default); otherwise the patient pays the full catalog price, whether or not a prescription exists.
+- A prescribed medication (or lab test) can be claimed at most once across all non-cancelled orders — enforced with a one-to-one link between the order line and the source prescription item, so the same prescription can't be dispensed twice through parallel pickup/delivery paths.
+- Shipping is priced differently depending on which of two distinct pharmacy flows the order goes through, and the two are not interchangeable:
+  - **Pharmacy cart** (buying medications, prescribed or not, one at a time): shipping is always free regardless of pickup or delivery — the per-item price already accounts for it. Claiming a `$0` prescribed item through the cart with delivery selected costs nothing at all, shipping included.
+  - **Dedicated "request delivery" flow** (bundles every unclaimed prescribed medication from one prescription into a single delivery order): always charges a flat shipping fee on top, regardless of whether the bundled medications price at `$0` or at full cost. This is the only path in the system where shipping is charged.
 - A pharmacy order's pickup code is generated once, only at the moment it becomes `Paid` (online payment or fully covered by a prescription); it stays unset while payment is pending, so an unpaid order can never be collected at a branch.
-- Delivery carries a flat shipping fee only when fulfilling a doctor's prescription; direct pharmacy purchases ship free because the item price already accounts for it.
 
 **Reviews**
 - A review can only be submitted for an appointment with status `Completed`, and only by the patient who owns that appointment.
