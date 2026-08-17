@@ -22,11 +22,12 @@ Idioma: [English](README.md) | **Español**
 3. [Reglas de negocio](#reglas-de-negocio)
 4. [Arquitectura del sistema](#arquitectura-del-sistema)
 5. [Esquema de base de datos](#esquema-de-base-de-datos)
-6. [Funcionalidades](#funcionalidades)
-7. [Stack tecnológico](#stack-tecnológico)
-8. [Roadmap](#roadmap)
-9. [Puesta en marcha](#puesta-en-marcha)
-10. [Aviso](#aviso)
+6. [Capacidades por rol](#capacidades-por-rol)
+7. [Limitaciones conocidas y comportamiento simulado](#limitaciones-conocidas-y-comportamiento-simulado)
+8. [Stack tecnológico](#stack-tecnológico)
+9. [Roadmap](#roadmap)
+10. [Puesta en marcha](#puesta-en-marcha)
+11. [Aviso](#aviso)
 
 ---
 
@@ -67,10 +68,14 @@ Las reglas siguientes están implementadas en código (restricciones de modelo, 
 - Un doctor no puede tener dos citas en estado bloqueante (`Confirmed`, `In Progress`, `Completed`, `No Show`) en la misma fecha y hora — impuesto por una restricción única condicional a nivel de base de datos, de modo que los horarios `Unpaid` y `Cancelled` pueden coexistir o reintentarse libremente.
 - Las citas virtuales no pueden tener una sede asignada; las citas presenciales deben tener una.
 - Las cancelaciones registran quién canceló (paciente, doctor, admin o sistema) y por qué; las reprogramaciones conservan la fecha/hora original e incrementan un contador.
+- Cuando un paciente cancela una cita pagada, el porcentaje de reembolso depende de cuánta anticipación dio: 100% con más de 48 horas de antelación, 50% entre 24 y 48 horas, 0% dentro de las 24 horas. Una cancelación iniciada por el doctor siempre reembolsa el 100%, sin importar la anticipación — el paciente nunca es penalizado por una decisión del doctor.
+- El horario semanal de un doctor (`DoctorSchedule`) no tiene API de autoservicio — los bloques de horario se crean y editan exclusivamente desde el admin de Django. Un doctor puede leer su propio horario pero no modificarlo desde su dashboard (ver [Limitaciones conocidas](#limitaciones-conocidas-y-comportamiento-simulado)).
 
-**Historiales clínicos**
+**Historiales clínicos y flujo de consulta**
 - Se crea como máximo un historial médico por cita, y es el punto de anclaje de cualquier receta u orden de laboratorio ligada a esa consulta.
 - Una línea de receta puede apuntar a un medicamento del catálogo o ser texto libre — un doctor no está limitado a recetar solo lo que existe en el formulario propio del hospital.
+- Un doctor solo puede mover una cita a través de un grafo de estados fijo: `Confirmed` → `In Progress`, `Completed`, `Cancelled` o `No Show`; `In Progress` → `Completed` o `Cancelled`. Cualquier otra transición se rechaza. Una cita virtual no puede pasar a `In Progress` sin antes fijar un enlace de videollamada.
+- Cerrar una consulta es una sola acción atómica: crea el historial médico y, en la misma solicitud, opcionalmente una receta y/u orden de laboratorio juntos. No puede ejecutarse dos veces sobre la misma cita, y ninguno de esos tres registros puede editarse ni borrarse después vía API — desde la perspectiva de la API, el historial clínico de un paciente es de solo-agregar.
 
 **Farmacia y cumplimiento de recetas**
 - Los medicamentos y las pruebas de laboratorio declaran, cada uno de forma independiente, dos banderas: `requires_prescription` y `free_when_prescribed`. Si `requires_prescription` es `False`, el paciente puede comprar o reservar el artículo directamente, sin que intervenga ningún doctor. Si es `True`, el endpoint de compra/reserva exige un ítem de receta sin reclamar para ese medicamento o prueba exacta — emitido antes por un doctor a través de una cita completada (`MedicalRecord` → `Prescription`/`LabOrder`) — y devuelve `403` en caso contrario. No existe forma de obtener un artículo con receta obligatoria sin esa consulta previa.
@@ -82,7 +87,8 @@ Las reglas siguientes están implementadas en código (restricciones de modelo, 
 - El código de retiro de un pedido de farmacia se genera una sola vez, únicamente en el momento en que pasa a `Paid` (pago en línea o cubierto totalmente por una receta); permanece sin definir mientras el pago está pendiente, de modo que un pedido no pagado nunca puede retirarse en una sede.
 
 **Reseñas**
-- Una reseña solo puede enviarse para una cita con estado `Completed`, y solo por el paciente dueño de esa cita.
+- Una reseña solo puede enviarse para una cita con estado `Completed`, y solo por el paciente dueño de esa cita; ese mismo paciente puede editarla o borrarla después, y solo existe una reseña por cita.
+- La visibilidad de las reseñas es pública, no está limitada al autor: cualquier paciente puede navegar un feed con todas las reseñas de todos los doctores, y las reseñas individuales de un doctor específico son legibles incluso por un visitante sin sesión iniciada. El catálogo de doctores que el paciente navega antes de agendar ya muestra la calificación promedio y el número de reseñas de cada doctor — se espera que el paciente elija por reputación antes de ser atendido, no que solo califique después.
 
 **Facturación**
 - Cada factura factura exactamente uno entre una cita o un pedido de farmacia — nunca ambos, nunca ninguno — impuesto con una restricción de verificación a nivel de base de datos.
@@ -329,17 +335,56 @@ erDiagram
 
 ---
 
-## Funcionalidades
+## Capacidades por rol
 
-- Flujos de registro e inicio de sesión separados para pacientes y doctores, con sesiones basadas en JWT.
-- Reserva, reprogramación, cancelación y finalización de citas, presenciales o virtuales, contra un calendario de disponibilidad por doctor.
-- Historiales médicos, recetas y órdenes de laboratorio generados durante una consulta y vinculados a ella.
-- Farmacia integrada: catálogo de medicamentos, compra directa con código QR de retiro, o entrega a domicilio con estado rastreado en vivo.
-- Pagos con Stripe y PayPal: checkout hospedado, tarjetas guardadas, reembolsos y disputas de facturación.
-- Facturación automática con numeración secuencial y paneles de pagos para pacientes y doctores.
-- Reseñas y calificaciones de doctores, restringidas a citas completadas.
-- Notificaciones dentro de la app para ambos roles.
-- Interfaz bilingüe (español/inglés).
+### Paciente
+
+- **Cuenta**: registro, inicio de sesión, edición de perfil (contacto, datos demográficos, foto), panel de estadísticas propio (citas, historiales, resultados de laboratorio, notificaciones sin leer).
+- **Citas**: navegar el catálogo público de servicios/doctores (visible incluso sin sesión), reservar presencial o virtual, pagar de inmediato o después, listar sus propias citas, reprogramar gratis contra el horario en vivo del doctor, cancelar con reembolso escalonado según anticipación, o eliminar directamente mientras siga sin pagar.
+- **Historial clínico**: acceso de solo lectura a sus propios historiales médicos, recetas y órdenes/resultados de laboratorio; descarga de PDFs de receta y orden de laboratorio bajo demanda.
+- **Farmacia**: navegar el catálogo público de medicamentos de venta libre, comprar medicamentos —recetados o no— mediante un carrito que soporta retiro o entrega a domicilio, o agrupar todas las medicinas recetadas pendientes en una sola solicitud de entrega dedicada.
+- **Pruebas de laboratorio**: navegar el catálogo público de laboratorios (marcado con una insignia "gratis para ti" cuando existe una receta sin reclamar que coincide), reservar un laboratorio directo cuando no requiere receta, o gratis contra una que sí la requiere.
+- **Seguimiento de entregas**: listar todos los pedidos en modalidad entrega y consultar un rastreador en vivo por pedido (ver [Limitaciones conocidas](#limitaciones-conocidas-y-comportamiento-simulado) para entender qué tan "en vivo" es realmente).
+- **Pagos**: checkout con Stripe/PayPal, gestión de tarjetas guardadas, historial y totales de pagos propios.
+- **Reseñas**: calificar y comentar sobre cualquier doctor a partir de una cita completada (una por cita, editable), y por separado navegar un feed público con todas las reseñas de todos los doctores, o las de un doctor específico — no limitado a lo que el propio paciente haya enviado.
+- **Notificaciones**: listar, filtrar por leído/no leído, marcar como leída, borrar.
+
+### Doctor
+
+- **Perfil**: editar su perfil y biografía; agregar o eliminar cualificaciones (título, institución, año, certificado).
+- **Disponibilidad**: leer su propio horario semanal vía API. Los bloques de horario en sí solo se gestionan actualmente desde el admin de Django, sin autoservicio (ver [Limitaciones conocidas](#limitaciones-conocidas-y-comportamiento-simulado)).
+- **Agenda**: listar y filtrar sus citas por fecha/mes; ver el detalle completo de una cita, incluyendo contacto y datos demográficos del paciente.
+- **Flujo de consulta**: llevar una cita a través de `Confirmed → In Progress → Completed` (o `Cancelled`/`No Show`); cerrar una consulta en una sola acción atómica que crea el historial médico y, opcionalmente, una receta y/u orden de laboratorio juntos (ver [Reglas de negocio](#reglas-de-negocio)).
+- **Cancelar/reprogramar**: cancelar una cita confirmada (siempre con reembolso completo al paciente) o reprogramarla contra su propio horario en vivo.
+- **Pagos y estadísticas**: ver sus propios pagos recibidos y estadísticas de ingresos; un dashboard que resume número de citas, número de pacientes, calificación promedio, cantidad de reseñas, ingresos y notificaciones sin leer.
+- **Reseñas**: leer sus propias reseñas vía el endpoint público por doctor; no puede responder, editar ni borrar una reseña de un paciente.
+- **Notificaciones**: listar, filtrar, marcar como leída, borrar.
+
+### Notificaciones por correo (SendGrid)
+
+Cada correo transaccional es de "disparar y olvidar" — un envío fallido queda registrado en el log pero nunca bloquea la solicitud — y todos comparten una misma plantilla con marca. Existen ocho disparadores distintos de punta a punta:
+
+| Disparador | Se envía cuando | Adjunto |
+|---|---|---|
+| Reset de contraseña | Se solicita un reset | — |
+| Cita confirmada | El pago de una cita se completa | PDF de factura |
+| Cita cancelada | Cualquiera de las dos partes cancela | — |
+| Cita reprogramada | Cualquiera de las dos partes reprograma | — |
+| Consulta virtual iniciada | El doctor marca la cita virtual como `In Progress` | Enlace de videollamada |
+| Pedido de farmacia listo para retiro | Se paga un pedido con modalidad retiro | Código QR de retiro, PDF de factura |
+| Pedido de farmacia enviado | Se paga un pedido con modalidad entrega | PDF de factura, enlace de seguimiento |
+| Entrega completada | El propio polling de seguimiento del paciente detecta la etapa final | — |
+
+Actualmente no existe correo de bienvenida al registrarse ni de "resultados de laboratorio listos" — ambos son adiciones naturales, todavía no construidas.
+
+---
+
+## Limitaciones conocidas y comportamiento simulado
+
+Siendo transparente sobre qué es una simplificación deliberada de alcance de demo y qué es una integración real:
+
+- **El seguimiento de entregas está simulado, no es real.** No hay integración con ningún mensajero, webhook, ni geolocalización en ninguna parte del código. `MedicineDelivery.stage` se calcula en cada consulta a partir del tiempo transcurrido desde que se pagó el pedido — 5 etapas fijas de 30 segundos cada una, unos 2 minutos de punta a punta — no a partir de ningún evento real. El correo de "entrega completada" solo se envía la próxima vez que el propio cliente del paciente consulta el endpoint de seguimiento después de alcanzar la etapa final; no hay ningún worker en segundo plano que garantice su envío si el paciente nunca vuelve a abrir esa pantalla. El siguiente paso real aquí sería un webhook de mensajería (o, como mínimo, una tarea programada en vez de polling disparado por el cliente) — construir eso de verdad, en lugar de la simulación actual, está en el roadmap.
+- **La disponibilidad del doctor todavía no tiene API de autoservicio.** El horario semanal de un doctor (`DoctorSchedule`) actualmente solo puede crearse o editarse desde el admin de Django — no existe un endpoint de "gestionar mi disponibilidad" en el propio dashboard del doctor.
 
 ---
 
@@ -364,6 +409,8 @@ erDiagram
 
 - **Chat seguro paciente-doctor vía [Medplum](https://github.com/medplum/medplum)** — una plataforma de salud de código abierto, nativa en FHIR. Medplum se está adoptando de forma deliberada, no como una función genérica de chat: está construida alrededor de los estándares de cifrado, control de acceso e interoperabilidad que generalmente se espera que cumpla el intercambio de datos de salud, que es el mismo nivel que esta integración busca darle al proyecto, en lugar de construir mensajería a medida que tendría que reinventar esas garantías.
 - Capacidades adicionales sobre Medplum (sincronización estructurada de recursos FHIR, intercambio de datos clínicos) conforme madure la integración.
+- **Una implementación real de seguimiento de entregas**, que reemplace la simulación actual basada en tiempo descrita en [Limitaciones conocidas](#limitaciones-conocidas-y-comportamiento-simulado) — probablemente un webhook de mensajería (o, como mínimo, una tarea programada) que mueva `MedicineDelivery.stage` a partir de eventos reales en vez de tiempo transcurrido en cada lectura.
+- Un endpoint de gestión de horario para el doctor, para que la disponibilidad semanal ya no dependa del admin de Django.
 
 ---
 

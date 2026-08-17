@@ -22,11 +22,12 @@ Language: **English** | [Espanol](README.es.md)
 3. [Business rules](#business-rules)
 4. [System architecture](#system-architecture)
 5. [Database schema](#database-schema)
-6. [Features](#features)
-7. [Tech stack](#tech-stack)
-8. [Roadmap](#roadmap)
-9. [Getting started](#getting-started)
-10. [Disclaimer](#disclaimer)
+6. [Capabilities by role](#capabilities-by-role)
+7. [Known limitations and simulated behavior](#known-limitations-and-simulated-behavior)
+8. [Tech stack](#tech-stack)
+9. [Roadmap](#roadmap)
+10. [Getting started](#getting-started)
+11. [Disclaimer](#disclaimer)
 
 ---
 
@@ -67,10 +68,14 @@ The rules below are enforced in code (model constraints, `clean()` validators, o
 - A doctor cannot hold two appointments in a blocking status (`Confirmed`, `In Progress`, `Completed`, `No Show`) at the same date and time — enforced by a conditional unique constraint at the database level, so `Unpaid` and `Cancelled` slots are free to coexist or be retried.
 - Virtual appointments cannot have a branch assigned; in-person appointments must have one.
 - Cancellations record who cancelled (patient, doctor, admin, or system) and why; reschedules preserve the original datetime and increment a counter.
+- A patient cancelling a paid appointment gets a refund percentage set by how much notice they gave: 100% more than 48 hours out, 50% between 24 and 48 hours, 0% inside 24 hours. A doctor-initiated cancellation always refunds 100%, regardless of notice — the patient is never penalized for a doctor's decision.
+- A doctor's weekly availability (`DoctorSchedule`) has no self-service API — schedule blocks are created and edited exclusively through the Django admin. A doctor can read their own schedule but not change it from their dashboard (see [Known limitations](#known-limitations-and-simulated-behavior)).
 
-**Clinical records**
+**Clinical records and consultation workflow**
 - A medical record is created at most once per appointment and is the anchor for any prescription or lab order tied to that visit.
 - A prescription line can point to a catalog medication or be free text — a doctor is not blocked from prescribing something outside the hospital's own formulary.
+- A doctor can only move an appointment along a fixed status graph: `Confirmed` → `In Progress`, `Completed`, `Cancelled` or `No Show`; `In Progress` → `Completed` or `Cancelled`. Any other transition is rejected. A virtual appointment cannot move to `In Progress` without a meeting link set first.
+- Closing a consultation is a single atomic action: it creates the medical record and, in the same request, an optional prescription and/or lab order together. It cannot be run twice on the same appointment, and none of those three records can be edited or deleted afterward through the API — from the API's perspective, a patient's clinical history is append-only.
 
 **Pharmacy and prescription fulfillment**
 - Medications and lab tests each declare, independently, two flags: `requires_prescription` and `free_when_prescribed`. If `requires_prescription` is `False`, a patient can buy or book the item directly, with no doctor involved. If it's `True`, the purchase or booking endpoint requires an unclaimed prescription item for that exact medication or lab test — issued earlier by a doctor through a completed appointment (`MedicalRecord` → `Prescription`/`LabOrder`) — and returns `403` otherwise. There is no way to acquire a prescription-gated item without that prior visit.
@@ -82,7 +87,8 @@ The rules below are enforced in code (model constraints, `clean()` validators, o
 - A pharmacy order's pickup code is generated once, only at the moment it becomes `Paid` (online payment or fully covered by a prescription); it stays unset while payment is pending, so an unpaid order can never be collected at a branch.
 
 **Reviews**
-- A review can only be submitted for an appointment with status `Completed`, and only by the patient who owns that appointment.
+- A review can only be submitted for an appointment with status `Completed`, and only by the patient who owns that appointment; that same patient can later edit or delete it, and only one review exists per appointment.
+- Review visibility is public, not limited to the author: any patient can browse a feed of every review across every doctor, and a specific doctor's individual reviews are readable even by an unauthenticated visitor. The doctor catalog a patient browses before booking already surfaces each doctor's aggregate rating and review count — a patient is expected to shop by reputation before ever being seen by that doctor, not just rate one afterward.
 
 **Billing**
 - Every invoice bills exactly one of an appointment or a pharmacy order — never both, never neither — enforced with a database check constraint.
@@ -329,17 +335,56 @@ erDiagram
 
 ---
 
-## Features
+## Capabilities by role
 
-- Separate registration and login flows for patients and doctors, with JWT-based sessions.
-- Appointment booking, rescheduling, cancellation and completion, in-person or virtual, against a per-doctor availability calendar.
-- Medical records, prescriptions and lab orders generated during a visit and linked to it.
-- An integrated pharmacy: medication catalog, direct purchase with a QR pickup code, or home delivery with live-tracked status.
-- Stripe and PayPal payments: hosted checkout, saved cards, refunds, and billing disputes.
-- Automatic invoicing with sequential numbering and payment dashboards for both patients and doctors.
-- Doctor reviews and ratings, restricted to completed appointments.
-- In-app notifications for both roles.
-- Bilingual interface (English/Spanish).
+### Patient
+
+- **Account**: register, log in, edit profile (contact info, demographics, photo), personal stats dashboard (appointments, records, lab results, unread notifications).
+- **Appointments**: browse the public service/doctor catalog (visible even logged out), book in-person or virtual, pay immediately or later, list own appointments, reschedule for free against the doctor's live schedule, cancel with a time-based refund, or delete outright while still unpaid.
+- **Clinical history**: read-only access to own medical records, prescriptions, and lab orders/results; download prescription and lab-order PDFs on demand.
+- **Pharmacy**: browse the over-the-counter medication catalog (public), buy medications — over-the-counter or prescribed — through a cart supporting pickup or delivery, or bundle every pending prescribed medication into one dedicated delivery request.
+- **Lab tests**: browse the public lab catalog (flagged with a "free for you" badge when an unclaimed matching prescription exists), book a lab directly when it doesn't require a prescription, or for free against one that does.
+- **Delivery tracking**: list every delivery-mode order and poll a live per-order tracker (see [Known limitations](#known-limitations-and-simulated-behavior) for how "live" is implemented).
+- **Payments**: Stripe/PayPal checkout, manage saved cards, personal payment history and totals.
+- **Reviews**: rate and comment on any doctor from a completed appointment (one per appointment, editable), and separately browse a public feed of every review across every doctor, or one doctor's reviews specifically — not limited to the patient's own submissions.
+- **Notifications**: list, filter by read/unread, mark as read, delete.
+
+### Doctor
+
+- **Profile**: edit own profile and bio; add or remove qualifications (degree, institution, year, certificate).
+- **Availability**: read own weekly schedule via the API. Schedule blocks themselves are currently managed only through the Django admin, not self-service (see [Known limitations](#known-limitations-and-simulated-behavior)).
+- **Agenda**: list and filter own appointments by date/month; view full appointment detail, including the patient's contact and demographic info.
+- **Consultation workflow**: drive an appointment through `Confirmed → In Progress → Completed` (or `Cancelled`/`No Show`); close a consultation in one atomic action that creates the medical record and, optionally, a prescription and/or lab order together (see [Business rules](#business-rules)).
+- **Cancel/reschedule**: cancel a confirmed appointment (always a full refund to the patient) or reschedule it against their own live schedule.
+- **Payments and stats**: own received payments and revenue stats; a dashboard summarizing appointment counts, patient counts, average rating, review count, revenue, and unread notifications.
+- **Reviews**: read own reviews via the public per-doctor endpoint; cannot respond to, edit, or delete a patient's review.
+- **Notifications**: list, filter, mark as read, delete.
+
+### Email notifications (SendGrid)
+
+Every transactional email is fire-and-forget — a failed send is logged, never blocks the request — and shares one branded template. Eight distinct triggers exist end to end:
+
+| Trigger | Fired when | Attachment |
+|---|---|---|
+| Password reset | A reset is requested | — |
+| Appointment confirmed | Payment for an appointment succeeds | Invoice PDF |
+| Appointment cancelled | Either party cancels | — |
+| Appointment rescheduled | Either party reschedules | — |
+| Virtual visit started | Doctor marks a virtual appointment `In Progress` | Meeting link |
+| Pharmacy order ready for pickup | A pickup-method order is paid | QR pickup code, invoice PDF |
+| Pharmacy order shipped | A delivery-method order is paid | Invoice PDF, tracking link |
+| Delivery completed | The patient's own tracking poll detects the final stage | — |
+
+There is currently no welcome email on signup and no "lab results ready" email — both are natural additions, not yet built.
+
+---
+
+## Known limitations and simulated behavior
+
+Being upfront about what's a deliberate demo-scope simplification versus a real integration:
+
+- **Delivery tracking is simulated, not real.** There is no courier integration, webhook, or geolocation anywhere in the codebase. `MedicineDelivery.stage` is computed on every poll from elapsed time since the order was paid — 5 fixed stages, 30 seconds each, about 2 minutes end to end — not from any real-world event. The "delivery completed" email is only sent the next time the patient's own client polls the tracking endpoint after the final stage is reached; there is no background worker guaranteeing it fires if the patient never reopens that screen. The next real step here would be a courier webhook (or at minimum a scheduled task instead of client-triggered polling) — genuinely building that out, rather than the current simulation, is on the roadmap.
+- **Doctor availability has no self-service API yet.** A doctor's weekly schedule (`DoctorSchedule`) can currently only be created or edited through the Django admin — there is no "manage my availability" endpoint on the doctor's own dashboard.
 
 ---
 
@@ -364,6 +409,8 @@ erDiagram
 
 - **Secure patient-doctor chat via [Medplum](https://github.com/medplum/medplum)** — an open-source, FHIR-native healthcare platform. Medplum is being adopted deliberately, not as a generic chat feature: it is built around the encryption, access-control and interoperability standards that healthcare data exchange is generally expected to meet, which is the same bar this integration is meant to hold the project to, rather than building bespoke messaging infrastructure that would need to reinvent those guarantees.
 - Additional Medplum-backed capabilities (structured FHIR resource sync, clinical data exchange) as the integration matures.
+- **A real delivery-tracking implementation**, replacing the current time-based simulation described in [Known limitations](#known-limitations-and-simulated-behavior) — likely a courier webhook (or, at minimum, a scheduled background task) driving `MedicineDelivery.stage` off real events instead of elapsed time on read.
+- A doctor-facing schedule management endpoint, so weekly availability no longer requires the Django admin.
 
 ---
 
