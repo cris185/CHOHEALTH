@@ -98,11 +98,11 @@ WSGI_APPLICATION = 'CHOHEALT_BACK.wsgi.application'
 DATABASE_URL = os.getenv('DATABASE_URL')
 
 if DATABASE_URL:
-    # Usar PostgreSQL en Supabase con Session Pooler
+    # PostgreSQL propio (VPS), conexion interna dentro de la misma red Docker: no requiere SSL.
     db_config = dj_database_url.config(
         default=DATABASE_URL,
         conn_max_age=600,
-        ssl_require=True,
+        ssl_require=os.getenv('DATABASE_SSL_REQUIRE', 'False') == 'True',
     )
     DATABASES = {'default': db_config}
 else:
