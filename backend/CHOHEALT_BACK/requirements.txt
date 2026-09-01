@@ -4,7 +4,9 @@ certifi==2026.2.25
 cffi==2.0.0
 charset-normalizer==3.4.7
 boto3==1.35.0
+cloudinary==1.44.2
 colorama==0.4.6
+django-cloudinary-storage==0.3.0
 cryptography==46.0.6
 deep-translator==1.11.4
 dj-database-url==3.1.2
