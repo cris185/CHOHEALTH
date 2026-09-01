@@ -173,6 +173,10 @@ STORAGES = {
     },
 }
 
+# Algunos archivos vendorizados (ej. bootstrap.bundle.min.js de Jazzmin) referencian
+# un .map que no viene incluido; evita que collectstatic falle por eso.
+WHITENOISE_MANIFEST_STRICT = False
+
 CLOUDINARY_STORAGE = {
     'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME', ''),
     'API_KEY': os.getenv('CLOUDINARY_API_KEY', ''),
