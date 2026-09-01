@@ -46,8 +46,7 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
 
-    'cloudinary_storage',
-    'cloudinary',
+    'storages',
 
     'rest_framework',
     'rest_framework_simplejwt.token_blacklist',
@@ -166,7 +165,19 @@ MEDIA_ROOT = BASE_DIR / 'media'
 
 STORAGES = {
     "default": {
-        "BACKEND": "cloudinary_storage.storage.MediaCloudinaryStorage",
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": os.getenv('AWS_STORAGE_BUCKET_NAME', 'chohealth-media'),
+            "endpoint_url": os.getenv('AWS_S3_ENDPOINT_URL'),
+            "access_key": os.getenv('AWS_ACCESS_KEY_ID'),
+            "secret_key": os.getenv('AWS_SECRET_ACCESS_KEY'),
+            "region_name": os.getenv('AWS_S3_REGION_NAME', 'us-east-1'),
+            "addressing_style": "path",
+            "default_acl": None,
+            "querystring_auth": False,
+            "file_overwrite": False,
+            "custom_domain": os.getenv('AWS_S3_CUSTOM_DOMAIN'),
+        },
     },
     "staticfiles": {
         # Algunos archivos vendorizados (ej. bootstrap.bundle.min.js de Jazzmin) referencian
@@ -175,11 +186,8 @@ STORAGES = {
     },
 }
 
-CLOUDINARY_STORAGE = {
-    'CLOUD_NAME': os.getenv('CLOUDINARY_CLOUD_NAME', ''),
-    'API_KEY': os.getenv('CLOUDINARY_API_KEY', ''),
-    'API_SECRET': os.getenv('CLOUDINARY_API_SECRET', ''),
-}
+# Solo usado por el comando de migracion one-off que trae los archivos historicos desde Cloudinary.
+CLOUDINARY_CLOUD_NAME = os.getenv('CLOUDINARY_CLOUD_NAME', '')
 
 
 # Jazzmin Admin UI Configuration

@@ -2,7 +2,6 @@ import shortuuid
 from django.db import models
 from django.db.models import Q
 from django.core.exceptions import ValidationError
-from cloudinary_storage.storage import RawMediaCloudinaryStorage
 from doctor.models import Doctor
 from patient.models import Patient
 
@@ -392,7 +391,7 @@ class LabResult(models.Model):
     sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
     lab_order_item = models.OneToOneField(LabOrderItem, on_delete=models.CASCADE, related_name='result')
     result_text = models.TextField(blank=True)
-    result_file = models.FileField(upload_to='lab_results', blank=True, storage=RawMediaCloudinaryStorage())
+    result_file = models.FileField(upload_to='lab_results', blank=True)
     notes = models.TextField(blank=True)
     completed_at = models.DateTimeField(auto_now_add=True)
 

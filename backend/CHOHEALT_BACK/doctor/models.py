@@ -2,7 +2,6 @@ import shortuuid
 from django.db import models
 from django.conf import settings
 from django.core.exceptions import ValidationError
-from cloudinary_storage.storage import RawMediaCloudinaryStorage
 
 
 class Doctor(models.Model):
@@ -58,7 +57,7 @@ class DoctorQualification(models.Model):
     degree = models.CharField(max_length=200)
     institution = models.CharField(max_length=300)
     year = models.PositiveIntegerField(null=True, blank=True)
-    certificate = models.FileField(upload_to='doctor_certificates', blank=True, storage=RawMediaCloudinaryStorage())
+    certificate = models.FileField(upload_to='doctor_certificates', blank=True)
 
     class Meta:
         ordering = ['-year']
