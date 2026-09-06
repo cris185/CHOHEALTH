@@ -264,8 +264,13 @@ PAYPAL_CLIENT_ID = os.getenv('PAYPAL_CLIENT_ID', '')
 PAYPAL_CLIENT_SECRET = os.getenv('PAYPAL_CLIENT_SECRET', '')
 PAYPAL_MODE = os.getenv('PAYPAL_MODE', 'sandbox')
 
-# SendGrid Email
-SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
+# Email (SMTP via Postal, self-hosted mailer — replaces SendGrid)
+EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+EMAIL_HOST = os.getenv('EMAIL_HOST', 'mail.cristianpuentes.com')
+EMAIL_PORT = int(os.getenv('EMAIL_PORT', '25'))
+EMAIL_USE_TLS = os.getenv('EMAIL_USE_TLS', 'False') == 'True'
+EMAIL_HOST_USER = os.getenv('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.getenv('EMAIL_HOST_PASSWORD', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', '')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 1

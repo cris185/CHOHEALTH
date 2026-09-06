@@ -1,11 +1,9 @@
-import base64
 import logging
+from email.message import MIMEPart
 from pathlib import Path
-from sendgrid import SendGridAPIClient
-from sendgrid.helpers.mail import (
-    Mail, Attachment, FileContent, FileName, FileType, Disposition, ContentId,
-)
+
 from django.conf import settings
+from django.core.mail import EmailMultiAlternatives
 
 from .pdf_invoice import generate_invoice_pdf
 
@@ -14,46 +12,60 @@ logger = logging.getLogger(__name__)
 LOGO_PATH = Path(__file__).resolve().parent.parent.parent / 'static' / 'logo.png'
 
 
-def _get_logo_b64() -> str:
-    """Return base64-encoded logo, cached at module level."""
-    if not hasattr(_get_logo_b64, '_cache'):
+def _get_logo_bytes() -> bytes:
+    """Return the raw logo bytes, cached at module level."""
+    if not hasattr(_get_logo_bytes, '_cache'):
         try:
-            _get_logo_b64._cache = base64.b64encode(LOGO_PATH.read_bytes()).decode()
+            _get_logo_bytes._cache = LOGO_PATH.read_bytes()
         except Exception:
-            _get_logo_b64._cache = ''
-    return _get_logo_b64._cache
+            _get_logo_bytes._cache = b''
+    return _get_logo_bytes._cache
 
 
-def _logo_attachment() -> Attachment | None:
-    """Create a SendGrid inline attachment for the logo (CID: logo)."""
-    b64 = _get_logo_b64()
-    if not b64:
+def _inline_image(content: bytes, cid: str, filename: str):
+    """Wrap PNG bytes as an inline image part, referenced in HTML via
+    `cid:<cid>`. Django 6 dropped the old `mixed_subtype` trick for proper
+    multipart/related nesting, so this is attached as a regular part like
+    any other attachment — every mail client that matters still resolves
+    `cid:` against the Content-ID header regardless of nesting.
+    """
+    if not content:
         return None
-    att = Attachment()
-    att.file_content = FileContent(b64)
-    att.file_name = FileName('logo.png')
-    att.file_type = FileType('image/png')
-    att.disposition = Disposition('inline')
-    att.content_id = ContentId('logo')
-    return att
+    part = MIMEPart()
+    part.set_content(content, maintype='image', subtype='png', disposition='inline', filename=filename, cid=f'<{cid}>')
+    return part
 
 
-def send_email(to_email, subject, html_content, attachments=None):
-    """Send an email via SendGrid. Fire-and-forget — never raises."""
-    message = Mail(
-        from_email=settings.DEFAULT_FROM_EMAIL,
-        to_emails=to_email,
-        subject=subject,
-        html_content=html_content,
-    )
-    if attachments:
-        for att in attachments:
-            message.add_attachment(att)
+def _logo_inline_image():
+    return _inline_image(_get_logo_bytes(), 'logo', 'logo.png')
+
+
+def send_email(to_email, subject, html_content, inline_images=None, attachments=None):
+    """Send an email via SMTP (Postal, self-hosted). Fire-and-forget — never raises.
+
+    `inline_images` is a list of MIMEPart objects (referenced via `cid:` in
+    `html_content`, e.g. the logo). `attachments` is a list of
+    (filename, content_bytes, mimetype) tuples for regular attachments
+    (e.g. an invoice PDF).
+    """
     try:
-        sg = SendGridAPIClient(settings.SENDGRID_API_KEY)
-        response = sg.send(message)
-        logger.info(f'Email sent to {to_email}, status={response.status_code}')
-        return response
+        email = EmailMultiAlternatives(
+            subject=subject,
+            body='',
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            to=[to_email],
+        )
+        email.attach_alternative(html_content, 'text/html')
+
+        for img in (inline_images or []):
+            email.attach(img)
+
+        for filename, content, mimetype in (attachments or []):
+            email.attach(filename, content, mimetype)
+
+        email.send(fail_silently=False)
+        logger.info(f'Email sent to {to_email}')
+        return True
     except Exception as e:
         logger.error(f'Failed to send email to {to_email}: {e}')
         return None
@@ -95,7 +107,7 @@ def send_password_reset_email(user, token):
         to_email=user.email,
         subject='CHO Health - Reset Your Password',
         html_content=html,
-        attachments=[a for a in [_logo_attachment()] if a],
+        inline_images=[i for i in [_logo_inline_image()] if i],
     )
 
 
@@ -193,33 +205,26 @@ def send_appointment_confirmation_email(appointment, invoice):
     </div>
     '''
 
-    # Generate PDF
+    subject = f'CHO Health - Appointment Confirmation & Invoice #{invoice.invoice_number}'
+    inline_images = [i for i in [_logo_inline_image()] if i]
+
     try:
         pdf_bytes = generate_invoice_pdf(invoice)
-        encoded_pdf = base64.b64encode(pdf_bytes).decode()
-        pdf_attachment = Attachment(
-            FileContent(encoded_pdf),
-            FileName(f'Invoice-{invoice.invoice_number}.pdf'),
-            FileType('application/pdf'),
-            Disposition('attachment'),
-        )
-
-        attachments = [a for a in [_logo_attachment(), pdf_attachment] if a]
-
         send_email(
             to_email=patient.user.email,
-            subject=f'CHO Health - Appointment Confirmation & Invoice #{invoice.invoice_number}',
+            subject=subject,
             html_content=html,
-            attachments=attachments,
+            inline_images=inline_images,
+            attachments=[(f'Invoice-{invoice.invoice_number}.pdf', pdf_bytes, 'application/pdf')],
         )
     except Exception as e:
         logger.error(f'Failed to send appointment confirmation: {e}')
-        # Still try to send without PDF
+        # Still try to send without the PDF
         send_email(
             to_email=patient.user.email,
-            subject=f'CHO Health - Appointment Confirmation & Invoice #{invoice.invoice_number}',
+            subject=subject,
             html_content=html,
-            attachments=[a for a in [_logo_attachment()] if a],
+            inline_images=inline_images,
         )
 
 
@@ -316,7 +321,7 @@ def send_appointment_cancellation_email(appointment, cancelled_by: str, refund_a
         to_email=patient.user.email,
         subject='CHO Health - Appointment Cancelled',
         html_content=html,
-        attachments=[a for a in [_logo_attachment()] if a],
+        inline_images=[i for i in [_logo_inline_image()] if i],
     )
 
 
@@ -399,24 +404,17 @@ def send_appointment_rescheduled_email(appointment, old_date, rescheduled_by: st
         to_email=patient.user.email,
         subject='CHO Health - Appointment Rescheduled',
         html_content=html,
-        attachments=[a for a in [_logo_attachment()] if a],
+        inline_images=[i for i in [_logo_inline_image()] if i],
     )
 
 
-def _medicine_invoice_pdf_attachment(invoice):
-    """Generate the invoice PDF and wrap it as a SendGrid attachment.
-
-    Returns None if generation fails — the caller should still send the email
-    without the attachment instead of blocking the whole flow.
+def _medicine_invoice_pdf_bytes(invoice):
+    """Generate the invoice PDF, returning None if generation fails — the
+    caller should still send the email without the attachment instead of
+    blocking the whole flow.
     """
     try:
-        pdf_bytes = generate_invoice_pdf(invoice)
-        att = Attachment()
-        att.file_content = FileContent(base64.b64encode(pdf_bytes).decode())
-        att.file_name = FileName(f'Invoice-{invoice.invoice_number}.pdf')
-        att.file_type = FileType('application/pdf')
-        att.disposition = Disposition('attachment')
-        return att
+        return generate_invoice_pdf(invoice)
     except Exception as e:
         logger.error(f'Failed to build medicine invoice PDF: {e}')
         return None
@@ -491,16 +489,16 @@ def send_medicine_order_pickup_email(order, qr_png_bytes: bytes, invoice=None):
     </div>
     '''
 
-    # Build the inline attachment for the QR (referenced via cid:pickup_qr).
-    qr_attachment = Attachment()
-    qr_attachment.file_content = FileContent(base64.b64encode(qr_png_bytes).decode())
-    qr_attachment.file_name = FileName(f'pickup-{code}.png')
-    qr_attachment.file_type = FileType('image/png')
-    qr_attachment.disposition = Disposition('inline')
-    qr_attachment.content_id = ContentId('pickup_qr')
+    inline_images = [i for i in [
+        _logo_inline_image(),
+        _inline_image(qr_png_bytes, 'pickup_qr', f'pickup-{code}.png'),
+    ] if i]
 
-    invoice_attachment = _medicine_invoice_pdf_attachment(invoice) if invoice else None
-    attachments = [a for a in [_logo_attachment(), qr_attachment, invoice_attachment] if a]
+    attachments = []
+    if invoice:
+        pdf_bytes = _medicine_invoice_pdf_bytes(invoice)
+        if pdf_bytes:
+            attachments.append((f'Invoice-{invoice.invoice_number}.pdf', pdf_bytes, 'application/pdf'))
 
     subject = (
         f'CHO Health - Pickup code {code} & Invoice #{invoice.invoice_number}'
@@ -511,6 +509,7 @@ def send_medicine_order_pickup_email(order, qr_png_bytes: bytes, invoice=None):
         to_email=patient.user.email,
         subject=subject,
         html_content=html,
+        inline_images=inline_images,
         attachments=attachments,
     )
 
@@ -605,8 +604,10 @@ def send_medicine_order_shipped_email(order, invoice):
     </div>
     '''
 
-    invoice_attachment = _medicine_invoice_pdf_attachment(invoice) if invoice else None
-    attachments = [a for a in [_logo_attachment(), invoice_attachment] if a]
+    attachments = []
+    pdf_bytes = _medicine_invoice_pdf_bytes(invoice) if invoice else None
+    if pdf_bytes:
+        attachments.append((f'Invoice-{invoice.invoice_number}.pdf', pdf_bytes, 'application/pdf'))
 
     subject = (
         f'CHO Health - Your order is on its way - Invoice #{invoice.invoice_number}'
@@ -617,6 +618,7 @@ def send_medicine_order_shipped_email(order, invoice):
         to_email=patient.user.email,
         subject=subject,
         html_content=html,
+        inline_images=[i for i in [_logo_inline_image()] if i],
         attachments=attachments,
     )
 
@@ -677,13 +679,11 @@ def send_virtual_appointment_started_email(appointment):
     </div>
     '''
 
-    attachments = [a for a in [_logo_attachment()] if a]
-
     send_email(
         to_email=patient.user.email,
         subject='CHO Health - Your virtual consultation is ready',
         html_content=html,
-        attachments=attachments,
+        inline_images=[i for i in [_logo_inline_image()] if i],
     )
 
 
@@ -743,11 +743,9 @@ def send_medicine_delivery_completed_email(order):
     </div>
     '''
 
-    attachments = [a for a in [_logo_attachment()] if a]
-
     send_email(
         to_email=patient.user.email,
         subject='CHO Health - Your medicines have been delivered',
         html_content=html,
-        attachments=attachments,
+        inline_images=[i for i in [_logo_inline_image()] if i],
     )
