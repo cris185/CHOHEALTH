@@ -8,8 +8,8 @@ import { useAuth } from '@/context/AuthContext';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
-import { Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Pill, TestTubes, Truck, Star } from 'lucide-react';
-import { reviews as reviewsApi } from '@/lib/api';
+import { Home, CalendarDays, Bell, DollarSign, User, LogOut, FlaskConical, Pill, TestTubes, Truck, Star, MessageCircle } from 'lucide-react';
+import { reviews as reviewsApi, messaging as messagingApi } from '@/lib/api';
 
 const mainNav = [
   { key: 'dashboard', href: '/dashboard/patient', icon: Home, exact: true },
@@ -24,6 +24,7 @@ const healthNav = [
 ];
 
 const activityNav = [
+  { key: 'messages', href: '/dashboard/patient/messages', icon: MessageCircle },
   { key: 'notifications', href: '/dashboard/patient/notifications', icon: Bell },
   { key: 'reviews', href: '/dashboard/patient/reviews', icon: Star },
   { key: 'payments', href: '/dashboard/patient/payments', icon: DollarSign },
@@ -38,6 +39,7 @@ export default function PatientSidebar() {
   const pathname = usePathname();
   const { logout } = useAuth();
   const [pendingReviews, setPendingReviews] = useState(0);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   useEffect(() => {
     const token = localStorage.getItem('access_token');
@@ -47,10 +49,20 @@ export default function PatientSidebar() {
       .catch(() => {});
   }, [pathname]);
 
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    const poll = () => messagingApi.unreadCount(token).then((d) => setUnreadMessages(d.unread_count)).catch(() => {});
+    poll();
+    const timer = setInterval(poll, 60000);
+    return () => clearInterval(timer);
+  }, [pathname]);
+
   const renderNavItem = (item: { key: string; href: string; icon: React.ElementType; exact?: boolean }) => {
     const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
     const Icon = item.icon;
     const hasPendingReviews = item.key === 'reviews' && pendingReviews > 0;
+    const unreadCount = item.key === 'messages' ? unreadMessages : 0;
 
     return (
       <Link key={item.key} href={item.href}>
@@ -77,6 +89,14 @@ export default function PatientSidebar() {
               isActive ? 'bg-white text-primary' : 'bg-amber-500 text-white animate-pulse'
             )}>
               {pendingReviews}
+            </span>
+          )}
+          {unreadCount > 0 && (
+            <span className={cn(
+              'flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10px] font-bold',
+              isActive ? 'bg-white text-primary' : 'bg-primary text-primary-foreground'
+            )}>
+              {unreadCount > 99 ? '99+' : unreadCount}
             </span>
           )}
         </div>

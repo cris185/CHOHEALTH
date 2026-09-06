@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
@@ -7,7 +8,8 @@ import { useAuth } from '@/context/AuthContext';
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import Image from 'next/image';
-import { Home, CalendarDays, Bell, DollarSign, User, LogOut } from 'lucide-react';
+import { Home, CalendarDays, Bell, DollarSign, User, LogOut, MessageCircle } from 'lucide-react';
+import { messaging as messagingApi } from '@/lib/api';
 
 const mainNav = [
   { key: 'dashboard', href: '/dashboard/doctor', icon: Home, exact: true },
@@ -15,6 +17,7 @@ const mainNav = [
 ];
 
 const activityNav = [
+  { key: 'messages', href: '/dashboard/doctor/messages', icon: MessageCircle },
   { key: 'notifications', href: '/dashboard/doctor/notifications', icon: Bell },
   { key: 'payments', href: '/dashboard/doctor/payments', icon: DollarSign },
 ];
@@ -27,10 +30,21 @@ export default function DoctorSidebar() {
   const t = useTranslations();
   const pathname = usePathname();
   const { logout } = useAuth();
+  const [unreadMessages, setUnreadMessages] = useState(0);
+
+  useEffect(() => {
+    const token = localStorage.getItem('access_token');
+    if (!token) return;
+    const poll = () => messagingApi.unreadCount(token).then((d) => setUnreadMessages(d.unread_count)).catch(() => {});
+    poll();
+    const timer = setInterval(poll, 60000);
+    return () => clearInterval(timer);
+  }, [pathname]);
 
   const renderNavItem = (item: { key: string; href: string; icon: React.ElementType; exact?: boolean }) => {
     const isActive = item.exact ? pathname === item.href : pathname.startsWith(item.href);
     const Icon = item.icon;
+    const unreadCount = item.key === 'messages' ? unreadMessages : 0;
 
     return (
       <Link key={item.key} href={item.href}>
@@ -41,7 +55,15 @@ export default function DoctorSidebar() {
             : 'text-muted-foreground hover:bg-muted hover:text-foreground'
         )}>
           <Icon className={cn('h-5 w-5', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
-          {t(`dashboard.doctor.nav.${item.key}`)}
+          <span className="flex-1">{t(`dashboard.doctor.nav.${item.key}`)}</span>
+          {unreadCount > 0 && (
+            <span className={cn(
+              'flex h-5 min-w-[1.25rem] items-center justify-center rounded-full px-1.5 text-[10px] font-bold',
+              isActive ? 'bg-white text-primary' : 'bg-primary text-primary-foreground'
+            )}>
+              {unreadCount > 99 ? '99+' : unreadCount}
+            </span>
+          )}
         </div>
       </Link>
     );

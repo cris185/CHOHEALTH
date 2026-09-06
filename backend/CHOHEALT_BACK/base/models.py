@@ -1,7 +1,11 @@
+from datetime import timedelta
+
 import shortuuid
+from django.conf import settings
 from django.db import models
 from django.db.models import Q
 from django.core.exceptions import ValidationError
+from django.utils import timezone
 from doctor.models import Doctor
 from patient.models import Patient
 
@@ -167,6 +171,160 @@ class MedicalRecord(models.Model):
 
     def __str__(self):
         return f'Record - {self.patient.full_name} ({self.created_at.strftime("%Y-%m-%d")})'
+
+
+# ============================================================================
+# Secure Messaging (hybrid storage, deliberately)
+#
+# Postgres owns thread/participant/read-state metadata — none of it PHI.
+# Medplum owns the actual message text (and, later, attachments) as FHIR
+# `Communication` resources, never exposed via a Django endpoint of its own.
+# One thread per Appointment, opened automatically when the appointment is
+# confirmed (see `open_message_thread_for_appointment`, called from the
+# payment-success and free-lab-booking flows) and closed a few days after
+# the visit completes, or immediately if the appointment is cancelled.
+# ============================================================================
+
+THREAD_STATUS = (
+    ('Open', 'Open'),
+    ('Closed', 'Closed'),
+)
+
+# Grace period after a visit completes, before the thread stops accepting
+# new messages. Longer when the visit left something to follow up on (a lab
+# order not yet Completed, or any prescription — external prescriptions
+# can't be tracked to "picked up" from here, so any prescription counts as
+# "may need follow-up"). Always capped at MESSAGE_THREAD_MAX_DAYS after the
+# thread first opened, so a lab order that never gets marked Completed
+# doesn't keep the channel open indefinitely.
+MESSAGE_THREAD_GRACE_DAYS_DEFAULT = 14
+MESSAGE_THREAD_GRACE_DAYS_WITH_FOLLOWUP = 30
+MESSAGE_THREAD_MAX_DAYS = 90
+
+SENDER_ROLE_CHOICES = (
+    ('patient', 'Patient'),
+    ('doctor', 'Doctor'),
+)
+
+
+class MessageThread(models.Model):
+    sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
+    appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='message_thread')
+    patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='message_threads')
+    doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='message_threads')
+    status = models.CharField(max_length=10, choices=THREAD_STATUS, default='Open')
+    opened_at = models.DateTimeField(auto_now_add=True)
+    # Set once the visit is over (Completed → grace period, Cancelled → now).
+    # Null means "still open, no end in sight yet".
+    closes_at = models.DateTimeField(null=True, blank=True)
+    # Denormalized so the inbox can sort/paginate without a Medplum round trip.
+    last_message_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    message_count = models.PositiveIntegerField(default=0)
+
+    class Meta:
+        ordering = ['-last_message_at', '-opened_at']
+
+    @property
+    def is_writable(self):
+        if self.status == 'Closed':
+            return False
+        if self.closes_at and timezone.now() > self.closes_at:
+            return False
+        return True
+
+    def __str__(self):
+        return f'Thread {self.sid[:6]} — {self.patient.full_name} / Dr. {self.doctor.first_last_name}'
+
+
+class ThreadMessage(models.Model):
+    """Metadata only — no message text here. `medplum_communication_id`
+    points at the FHIR `Communication` resource that holds the actual text.
+    """
+    sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
+    thread = models.ForeignKey(MessageThread, on_delete=models.CASCADE, related_name='messages')
+    sender_user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='sent_thread_messages')
+    sender_role = models.CharField(max_length=10, choices=SENDER_ROLE_CHOICES)
+    medplum_communication_id = models.CharField(max_length=64, unique=True)
+    has_attachments = models.BooleanField(default=False)
+    # FHIR Binary id, cached here so downloads don't need to fetch the
+    # Communication first just to find it. Filename/content-type/size stay
+    # in Medplum (in the Communication's payload), not duplicated here.
+    attachment_binary_id = models.CharField(max_length=64, blank=True)
+    sent_at = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        ordering = ['sent_at']
+
+    def __str__(self):
+        return f'Message {self.sid[:6]} in thread {self.thread.sid[:6]}'
+
+
+class ThreadRead(models.Model):
+    thread = models.ForeignKey(MessageThread, on_delete=models.CASCADE, related_name='reads')
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='thread_reads')
+    last_read_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        unique_together = ('thread', 'user')
+
+    def __str__(self):
+        return f'{self.user.email} read {self.thread.sid[:6]} at {self.last_read_at}'
+
+
+def open_message_thread_for_appointment(appointment):
+    """Idempotently open the secure-messaging thread for a just-confirmed
+    appointment. No-op if there's no doctor attached (e.g. a free prescribed
+    lab pickup, which has `doctor=None`), if this is a lab visit rather than
+    a consultation (`doctor` then points at lab staff, not a treating
+    physician — see `Appointment.lab_test`/`Service.service_type`), or if a
+    thread already exists.
+    """
+    if not appointment.doctor_id:
+        return None
+    if appointment.lab_test_id:
+        return None
+    if appointment.service_id and appointment.service.service_type != 'Consultation':
+        return None
+    if hasattr(appointment, 'message_thread'):
+        return appointment.message_thread
+    return MessageThread.objects.create(
+        appointment=appointment,
+        patient=appointment.patient,
+        doctor=appointment.doctor,
+    )
+
+
+def close_message_thread_for_appointment(appointment, *, immediately=False):
+    """Close the thread (if any) when the visit ends.
+
+    `immediately=True` for a cancelled appointment — no reason to keep a
+    channel open for a visit that never happened. Otherwise (visit
+    completed), grants a grace period — longer if there's a pending lab
+    order or a prescription to follow up on — capped at
+    `MESSAGE_THREAD_MAX_DAYS` from when the thread first opened. Call this
+    only once the medical record / prescription / lab order for the visit
+    already exist, so the pending-follow-up check sees them.
+    """
+    if not hasattr(appointment, 'message_thread'):
+        return
+    thread = appointment.message_thread
+
+    if immediately:
+        thread.status = 'Closed'
+        thread.save(update_fields=['status'])
+        return
+
+    grace_days = MESSAGE_THREAD_GRACE_DAYS_DEFAULT
+    if hasattr(appointment, 'medical_record'):
+        record = appointment.medical_record
+        has_pending_lab = record.lab_orders.exclude(status__in=['Completed', 'Cancelled']).exists()
+        has_prescription = hasattr(record, 'prescription')
+        if has_pending_lab or has_prescription:
+            grace_days = MESSAGE_THREAD_GRACE_DAYS_WITH_FOLLOWUP
+
+    hard_cap = thread.opened_at + timedelta(days=MESSAGE_THREAD_MAX_DAYS)
+    thread.closes_at = min(timezone.now() + timedelta(days=grace_days), hard_cap)
+    thread.save(update_fields=['closes_at'])
 
 
 # ============================================================================

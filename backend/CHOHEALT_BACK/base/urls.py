@@ -28,6 +28,11 @@ from .review_views import (
     DoctorReviewsListView, MyReviewsListView, AllReviewsListView,
     PendingReviewsListView, ReviewCreateOrUpdateView, ReviewDeleteView,
 )
+from .messaging_views import (
+    ThreadOpenView, ThreadListView, ThreadUnreadCountView,
+    ThreadMarkReadView, ThreadMessageListCreateView, ThreadCloseView,
+    ThreadAttachmentUploadView, ThreadAttachmentDownloadView,
+)
 
 urlpatterns = [
     path('services/', ServiceListView.as_view(), name='service-list'),
@@ -77,4 +82,14 @@ urlpatterns = [
     path('reviews/pending/', PendingReviewsListView.as_view(), name='review-pending'),
     path('reviews/doctor/<str:sid>/', DoctorReviewsListView.as_view(), name='review-by-doctor'),
     path('reviews/<str:sid>/', ReviewDeleteView.as_view(), name='review-delete'),
+
+    # Secure messaging (patient <-> doctor)
+    path('appointments/<str:sid>/thread/', ThreadOpenView.as_view(), name='thread-open'),
+    path('threads/', ThreadListView.as_view(), name='thread-list'),
+    path('threads/unread-count/', ThreadUnreadCountView.as_view(), name='thread-unread-count'),
+    path('threads/<str:sid>/messages/', ThreadMessageListCreateView.as_view(), name='thread-messages'),
+    path('threads/<str:sid>/messages/<str:message_sid>/attachment/', ThreadAttachmentDownloadView.as_view(), name='thread-attachment-download'),
+    path('threads/<str:sid>/attachments/', ThreadAttachmentUploadView.as_view(), name='thread-attachment-upload'),
+    path('threads/<str:sid>/read/', ThreadMarkReadView.as_view(), name='thread-mark-read'),
+    path('threads/<str:sid>/close/', ThreadCloseView.as_view(), name='thread-close'),
 ]

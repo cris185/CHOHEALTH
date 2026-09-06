@@ -31,7 +31,7 @@ from patient.permissions import IsPatient
 from doctor.permissions import IsDoctor
 from doctor.models import Notification, DoctorSchedule
 
-from .models import Appointment
+from .models import Appointment, close_message_thread_for_appointment
 from billing.models import Invoice
 from billing.refund_service import process_refund, calculate_refund_amount
 from userauths.services.email_service import (
@@ -192,6 +192,7 @@ class PatientAppointmentCancelView(APIView):
             appointment.cancelled_by = 'patient'
             appointment.cancel_reason = reason
             appointment.save(update_fields=['status', 'cancelled_at', 'cancelled_by', 'cancel_reason'])
+            close_message_thread_for_appointment(appointment, immediately=True)
 
             if invoice and invoice.status != 'Void':
                 invoice.status = 'Void'
@@ -229,6 +230,7 @@ class PatientAppointmentCancelView(APIView):
         appointment.cancelled_by = 'patient'
         appointment.cancel_reason = reason
         appointment.save(update_fields=['status', 'cancelled_at', 'cancelled_by', 'cancel_reason'])
+        close_message_thread_for_appointment(appointment, immediately=True)
 
         # Notify doctor
         if appointment.doctor:
@@ -375,6 +377,7 @@ class DoctorAppointmentCancelView(APIView):
         appointment.cancelled_by = 'doctor'
         appointment.cancel_reason = reason
         appointment.save(update_fields=['status', 'cancelled_at', 'cancelled_by', 'cancel_reason'])
+        close_message_thread_for_appointment(appointment, immediately=True)
 
         # Notify patient in-app
         _notify(

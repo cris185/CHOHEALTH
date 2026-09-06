@@ -42,6 +42,10 @@ class Patient(models.Model):
     # Stripe
     stripe_customer_id = models.CharField(max_length=255, blank=True)
 
+    # Medplum FHIR Patient resource id. Provisioned lazily on first use
+    # (e.g. opening a secure message thread), not at registration time.
+    medplum_patient_id = models.CharField(max_length=64, blank=True, db_index=True)
+
     @property
     def full_name(self):
         parts = [self.first_name, self.second_name, self.first_last_name, self.second_last_name]

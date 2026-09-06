@@ -28,6 +28,10 @@ class Doctor(models.Model):
     average_rating = models.DecimalField(max_digits=3, decimal_places=2, default=0)
     total_reviews = models.PositiveIntegerField(default=0)
 
+    # Medplum FHIR Practitioner resource id. Provisioned lazily on first use
+    # (e.g. opening a secure message thread), not at registration time.
+    medplum_practitioner_id = models.CharField(max_length=64, blank=True, db_index=True)
+
     def recalculate_rating(self):
         from base.models import Review
         from django.db.models import Avg, Count
@@ -126,6 +130,7 @@ NOTIFICATION_TYPE = (
     ('Medication Dispatched', 'Medication Dispatched'),
     ('Medication Delivered', 'Medication Delivered'),
     ('Rate Doctor', 'Rate Doctor'),
+    ('New Message', 'New Message'),
 )
 
 

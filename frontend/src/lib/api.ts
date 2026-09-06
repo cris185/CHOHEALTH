@@ -943,6 +943,86 @@ export interface PaginatedResponse<T> {
   results: T[];
 }
 
+// ============================================================================
+// Secure messaging (patient <-> doctor, one thread per appointment)
+// ============================================================================
+
+export interface ThreadItem {
+  sid: string;
+  appointment_sid: string;
+  status: 'Open' | 'Closed';
+  is_writable: boolean;
+  other_party_name: string;
+  last_message_at: string | null;
+  message_count: number;
+  unread_count: number;
+  my_role: 'patient' | 'doctor';
+}
+
+export interface ThreadAttachment {
+  filename: string;
+  content_type: string;
+  size: number;
+  /** Relative API path — proxied through Django, never a raw Medplum URL. */
+  download_url: string;
+}
+
+export interface ThreadMessageItem {
+  sid: string;
+  sender_role: 'patient' | 'doctor';
+  is_mine: boolean;
+  has_attachments: boolean;
+  sent_at: string;
+  content: string;
+  attachment: ThreadAttachment | null;
+}
+
+export interface ThreadMessagesResponse {
+  thread: ThreadItem;
+  messages: ThreadMessageItem[];
+}
+
+export const messaging = {
+  list: (token: string): Promise<ThreadItem[]> =>
+    fetchAPI('/threads/', { token }),
+
+  unreadCount: (token: string): Promise<{ unread_count: number }> =>
+    fetchAPI('/threads/unread-count/', { token }),
+
+  messages: (threadSid: string, token: string): Promise<ThreadMessagesResponse> =>
+    fetchAPI(`/threads/${threadSid}/messages/`, { token }),
+
+  send: (threadSid: string, content: string, token: string): Promise<ThreadMessageItem> =>
+    fetchAPI(`/threads/${threadSid}/messages/`, {
+      method: 'POST',
+      body: JSON.stringify({ content }),
+      token,
+    }),
+
+  uploadAttachment: (threadSid: string, file: File, caption: string, token: string): Promise<ThreadMessageItem> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (caption) formData.append('caption', caption);
+    return fetchMultipart(`/threads/${threadSid}/attachments/`, { method: 'POST', body: formData, token });
+  },
+
+  /** Fetches an attachment's bytes as a Blob (auth header can't ride on an <img src>). */
+  attachmentBlob: async (downloadUrl: string, token: string): Promise<Blob> => {
+    const res = await fetch(`${API_URL}${downloadUrl}`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!res.ok) throw { status: res.status, data: await res.json().catch(() => null) };
+    return res.blob();
+  },
+
+  markRead: (threadSid: string, token: string) =>
+    fetchAPI(`/threads/${threadSid}/read/`, { method: 'POST', token }),
+
+  close: (threadSid: string, token: string): Promise<ThreadItem> =>
+    fetchAPI(`/threads/${threadSid}/close/`, { method: 'POST', token }),
+
+  openForAppointment: (appointmentSid: string, token: string): Promise<ThreadItem> =>
+    fetchAPI(`/appointments/${appointmentSid}/thread/`, { method: 'POST', token }),
+};
+
 export const notifications = {
   list: (token: string, params?: { status?: string; page?: number }): Promise<PaginatedResponse<NotificationItem>> => {
     const searchParams = new URLSearchParams();

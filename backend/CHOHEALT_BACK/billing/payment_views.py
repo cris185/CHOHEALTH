@@ -13,7 +13,10 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from patient.permissions import IsPatient
-from base.models import Appointment, Service, Branch, MedicineOrder, MedicineDelivery
+from base.models import (
+    Appointment, Service, Branch, MedicineOrder, MedicineDelivery,
+    open_message_thread_for_appointment,
+)
 from base.pickup_code import generate_unique_pickup_code, generate_qr_png_bytes
 from doctor.models import Doctor, Notification
 from .stripe_customer import get_or_create_stripe_customer
@@ -369,6 +372,7 @@ def _process_appointment_payment_success(appointment, payment_method, gateway_ch
             'A refund will need to be issued.'
         )
 
+    open_message_thread_for_appointment(appointment)
     _create_appointment_notification(appointment)
     send_appointment_confirmation_email(appointment, invoice)
     return True

@@ -191,9 +191,8 @@ class Command(BaseCommand):
             # already-existing user this resets to the known password — fine
             # for a dev/demo seed, remove this line if you want to preserve
             # existing passwords.
-            if user_created:
-                user.set_password(DEFAULT_PASSWORD)
-                user.save()
+            user.set_password(DEFAULT_PASSWORD)
+            user.save()
 
             doctor, doctor_created = Doctor.objects.get_or_create(
                 user=user,

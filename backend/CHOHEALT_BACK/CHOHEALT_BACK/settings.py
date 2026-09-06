@@ -55,6 +55,7 @@ INSTALLED_APPS = [
     'base',
     'billing',
     'doctor',
+    'medplum',
     'patient',
     'userauths',
 ]
@@ -268,6 +269,15 @@ SENDGRID_API_KEY = os.getenv('SENDGRID_API_KEY', '')
 DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', '')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 1
+
+# Medplum (FHIR server, self-hosted). Disabled by default so local dev / CI
+# doesn't need a running Medplum instance — messaging endpoints degrade to
+# 503 when this is False, everything else in the app is unaffected.
+MEDPLUM_ENABLED = os.getenv('MEDPLUM_ENABLED', 'False') == 'True'
+MEDPLUM_BASE_URL = os.getenv('MEDPLUM_BASE_URL', 'https://medplum-api.cristianpuentes.com')
+MEDPLUM_CLIENT_ID = os.getenv('MEDPLUM_CLIENT_ID', '')
+MEDPLUM_CLIENT_SECRET = os.getenv('MEDPLUM_CLIENT_SECRET', '')
+MEDPLUM_TIMEOUT = (5, 15)
 
 JAZZMIN_UI_TWEAKS = {
     "accent": "accent-primary",

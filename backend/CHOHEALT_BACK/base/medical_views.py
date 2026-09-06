@@ -15,6 +15,7 @@ from .models import (
     Prescription, PrescriptionItem, Branch,
     LabTest, LabOrder, LabOrderItem,
     MedicineOrder, MedicineOrderItem,
+    open_message_thread_for_appointment, close_message_thread_for_appointment,
 )
 from .pickup_code import generate_unique_pickup_code, generate_qr_png_bytes
 from billing.models import Invoice, InvoiceLineItem
@@ -213,6 +214,11 @@ class DoctorAppointmentCompleteView(APIView):
                     notes=item_data.get('notes', ''),
                 )
             lab_order_sid = lab_order.sid
+
+        # Extend the messaging thread's grace period now that we know
+        # whether this visit produced a prescription/lab order to follow up
+        # on (record/prescription/lab_order all exist by this point).
+        close_message_thread_for_appointment(appointment)
 
         # 5. Notify the patient with a single, coherent message
         has_rx = prescription_sid is not None
@@ -626,6 +632,9 @@ class BookDirectLabAppointmentView(APIView):
         if rx_item is not None:
             rx_item.is_claimed = True
             rx_item.save(update_fields=['is_claimed'])
+
+        if appointment.status == 'Confirmed':
+            open_message_thread_for_appointment(appointment)
 
         return Response(
             {
