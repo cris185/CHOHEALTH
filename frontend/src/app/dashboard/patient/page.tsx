@@ -81,7 +81,7 @@ export default function PatientDashboard() {
             <Activity className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">{t('dashboard.patient.title')}</h2>
+            <h2 className="section-title text-2xl font-bold tracking-tight">{t('dashboard.patient.title')}</h2>
             <p className="text-sm text-muted-foreground">Welcome back, <span className="font-medium text-foreground">{user.username}</span></p>
           </div>
         </div>
@@ -120,7 +120,7 @@ export default function PatientDashboard() {
           const Icon = card.icon;
           return (
             <motion.div key={card.label} variants={item}>
-              <Card className="hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+              <Card className="glass-panel hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
                 <CardContent className="p-5">
                   <div className="flex items-center gap-3">
                     <div className={`flex h-11 w-11 items-center justify-center rounded-xl ${card.color} transition-transform group-hover:scale-110`}>
@@ -142,7 +142,7 @@ export default function PatientDashboard() {
       <div className="grid gap-6 lg:grid-cols-3 mb-8">
         {/* Recent Appointments */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lg:col-span-2">
-          <Card>
+          <Card className="glass-panel">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -189,7 +189,7 @@ export default function PatientDashboard() {
 
         {/* Quick Actions */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-          <Card>
+          <Card className="glass-panel">
             <CardHeader className="pb-3">
               <CardTitle className="text-base">Quick Actions</CardTitle>
             </CardHeader>

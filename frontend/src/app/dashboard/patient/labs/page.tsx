@@ -93,7 +93,7 @@ export default function LabsPage() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <TestTubes className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold tracking-tight">{t('title')}</h2>
+        <h2 className="section-title text-2xl font-bold tracking-tight">{t('title')}</h2>
       </div>
 
       {toast && (
@@ -123,7 +123,7 @@ export default function LabsPage() {
               ))}
             </div>
           ) : labOrders.length === 0 ? (
-            <Card>
+            <Card className="glass-panel">
               <CardContent className="py-16 text-center">
                 <FileText className="mx-auto h-12 w-12 text-muted-foreground/30" />
                 <p className="mt-4 text-sm font-medium text-muted-foreground">{t('noOrders')}</p>
@@ -133,7 +133,7 @@ export default function LabsPage() {
           ) : (
             <div className="space-y-4">
               {labOrders.map((order) => (
-                <Card key={order.sid}>
+                <Card key={order.sid} className="glass-panel">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between gap-3">
                       <div className="flex flex-wrap items-center gap-2">
@@ -278,7 +278,7 @@ function LabCatalogList() {
 
   if (tests.length === 0) {
     return (
-      <Card>
+      <Card className="glass-panel">
         <CardContent className="py-16 text-center">
           <FlaskConical className="mx-auto h-12 w-12 text-muted-foreground/30" />
           <p className="mt-4 text-sm font-medium text-muted-foreground">{t('noLabServices')}</p>
@@ -301,7 +301,7 @@ function LabCatalogList() {
         //     (so the backend will let them book free).
         const canBookDirect = isOtc || hasRx;
         return (
-          <Card key={test.sid} className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-md">
+          <Card key={test.sid} className="glass-panel flex h-full flex-col overflow-hidden transition-shadow hover:shadow-md">
             {testImage ? (
               <div className="flex h-40 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
                 <img

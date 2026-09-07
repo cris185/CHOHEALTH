@@ -157,7 +157,7 @@ export default function DoctorAppointmentsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <CalendarDays className="h-6 w-6 text-primary" />
-          <h2 className="text-2xl font-bold tracking-tight">{t('dashboard.doctor.nav.appointments')}</h2>
+          <h2 className="section-title text-2xl font-bold tracking-tight">{t('dashboard.doctor.nav.appointments')}</h2>
         </div>
         <Button variant="outline" size="sm" onClick={() => {
           const ny = getNYYearMonthDay();
@@ -172,7 +172,7 @@ export default function DoctorAppointmentsPage() {
       <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
         {/* Left: Calendar */}
         <div>
-          <Card>
+          <Card className="glass-panel">
             <CardContent className="p-5">
               {/* Month navigation */}
               <div className="mb-4 flex items-center justify-between">
@@ -225,7 +225,7 @@ export default function DoctorAppointmentsPage() {
         {/* Right: Day timeline */}
         <div>
           {selectedDate ? (
-            <Card>
+            <Card className="glass-panel">
               <CardContent className="p-5">
                 {/* Day header with count */}
                 <div className="flex items-center justify-between mb-4">
@@ -305,7 +305,7 @@ export default function DoctorAppointmentsPage() {
               </CardContent>
             </Card>
           ) : (
-            <Card>
+            <Card className="glass-panel">
               <CardContent className="flex items-center justify-center py-20">
                 <p className="text-muted-foreground">{t('dashboard.doctor.appointmentsPage.selectDayPrompt')}</p>
               </CardContent>

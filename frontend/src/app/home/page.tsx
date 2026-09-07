@@ -44,7 +44,7 @@ export default function HomePage() {
                 <Image src="/logo.png" alt="CHO Health" width={280} height={100} className="h-28 w-auto brightness-0 invert" />
               </div>
             </div>
-            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
+            <h1 className="font-heading text-4xl font-bold tracking-tight sm:text-5xl lg:text-6xl">
               {t('home.hero')}
             </h1>
             <p className="mt-6 text-lg text-white/80 leading-relaxed">
@@ -93,12 +93,12 @@ export default function HomePage() {
       {/* Features */}
       <section className="py-20">
         <div className="mx-auto max-w-7xl px-4">
-          <h2 className="text-center text-3xl font-bold tracking-tight">{t('home.features')}</h2>
+          <h2 className="text-center text-3xl font-bold tracking-tight"><span className="section-title-mark">{t('home.features')}</span></h2>
           <div className="mt-12 grid gap-8 md:grid-cols-3">
             {features.map((f) => {
               const Icon = f.icon;
               return (
-                <Card key={f.title} className="text-center transition-all hover:shadow-md">
+                <Card key={f.title} className="glass-panel text-center transition-all hover:shadow-md">
                   <CardContent className="pt-8 pb-6">
                     <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-xl ${f.color}`}>
                       <Icon className="h-7 w-7" />
@@ -116,7 +116,7 @@ export default function HomePage() {
       {/* Services */}
       <section className="border-y bg-muted/30 py-20">
         <div className="mx-auto max-w-7xl px-4">
-          <h2 className="text-center text-3xl font-bold tracking-tight">{t('services.title')}</h2>
+          <h2 className="text-center text-3xl font-bold tracking-tight"><span className="section-title-mark">{t('services.title')}</span></h2>
           <div className="mt-12">
             <ServiceCarousel showBookButton={!user} />
           </div>
@@ -139,7 +139,7 @@ export default function HomePage() {
         `}</style>
 
         <div className="mx-auto max-w-7xl px-4 mb-12">
-          <h2 className="text-center text-3xl font-bold tracking-tight">{t('home.testimonialsTitle')}</h2>
+          <h2 className="text-center text-3xl font-bold tracking-tight"><span className="section-title-mark">{t('home.testimonialsTitle')}</span></h2>
         </div>
 
         <div className="marquee-container relative">
@@ -149,7 +149,7 @@ export default function HomePage() {
           <div className="marquee-track flex w-max">
             {[...testimonials, ...testimonials].map((item, idx) => (
               <div key={`${item.author}-${idx}`} className="w-[350px] shrink-0 px-3">
-                <Card className="h-[240px] flex flex-col transition-shadow hover:shadow-lg">
+                <Card className="glass-panel h-[240px] flex flex-col transition-shadow hover:shadow-lg">
                   <CardContent className="pt-6 flex flex-col flex-1">
                     <div className="flex gap-0.5 mb-3">
                       {[...Array(5)].map((_, i) => (
@@ -182,7 +182,7 @@ export default function HomePage() {
       {/* CTA */}
       <section className="bg-gradient-to-br from-primary to-blue-700 py-20">
         <div className="mx-auto max-w-2xl px-4 text-center text-primary-foreground">
-          <h2 className="text-3xl font-bold tracking-tight">{t('home.ctaTitle')}</h2>
+          <h2 className="font-heading text-3xl font-bold tracking-tight">{t('home.ctaTitle')}</h2>
           <p className="mt-4 text-lg text-white/80">{t('home.ctaSubtitle')}</p>
           <Link href="/register" className="mt-8 inline-block">
             <Button size="lg" variant="secondary">{t('home.ctaButton')} <ArrowRight className="ml-2 h-4 w-4" /></Button>

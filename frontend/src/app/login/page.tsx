@@ -39,11 +39,11 @@ export default function LoginPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2">
           <Image src="/logo.png" alt="CHO Health" width={220} height={80} className="h-20 w-auto" />
-          <h1 className="text-2xl font-bold tracking-tight">{t('common.appName')}</h1>
+          <h1 className="section-title-mark text-2xl font-bold tracking-tight">{t('common.appName')}</h1>
           <p className="text-sm text-muted-foreground">{t('login.title')}</p>
         </div>
 
-        <Card>
+        <Card className="glass-panel">
           <form onSubmit={handleSubmit}>
             <CardContent className="space-y-4 pt-6">
               {error && (

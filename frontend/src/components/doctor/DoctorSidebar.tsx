@@ -51,10 +51,10 @@ export default function DoctorSidebar() {
         <div className={cn(
           'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
           isActive
-            ? 'bg-primary text-primary-foreground shadow-sm'
+            ? 'bg-primary/15 text-primary font-semibold'
             : 'text-muted-foreground hover:bg-muted hover:text-foreground'
         )}>
-          <Icon className={cn('h-5 w-5', isActive ? 'text-primary-foreground' : 'text-muted-foreground')} />
+          <Icon className={cn('h-5 w-5', isActive ? 'text-primary' : 'text-muted-foreground')} />
           <span className="flex-1">{t(`dashboard.doctor.nav.${item.key}`)}</span>
           {unreadCount > 0 && (
             <span className={cn(
@@ -70,7 +70,7 @@ export default function DoctorSidebar() {
   };
 
   return (
-    <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col sticky top-16 h-[calc(100vh-4rem)]">
+    <aside className="glass-panel hidden w-72 shrink-0 lg:flex lg:flex-col sticky top-16 h-[calc(100vh-4rem)]">
       {/* Brand */}
       <div className="flex h-24 items-center justify-center px-5">
         <Image src="/logo.png" alt="CHO Health" width={480} height={160} className="h-20 w-auto" priority />

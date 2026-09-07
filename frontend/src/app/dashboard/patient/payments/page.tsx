@@ -63,7 +63,7 @@ export default function PatientPaymentsPage() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <DollarSign className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold tracking-tight">Payments</h2>
+        <h2 className="section-title text-2xl font-bold tracking-tight">Payments</h2>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3 mb-8">
@@ -91,7 +91,7 @@ export default function PatientPaymentsPage() {
       </div>
 
       {/* Payment History */}
-      <Card>
+      <Card className="glass-panel">
         <CardContent className="p-0 max-h-[500px] overflow-y-auto">
           {loading ? (
             <div className="p-6 space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>

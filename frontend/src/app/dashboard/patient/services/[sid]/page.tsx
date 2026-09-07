@@ -76,7 +76,7 @@ export default function ServiceDetailPage() {
           </div>
 
           <div>
-            <h1 className="text-3xl font-bold text-gray-900">{service.name}</h1>
+            <h1 className="section-title text-3xl font-bold">{service.name}</h1>
             {service.description && (
               <p className="mt-4 text-gray-600">{service.description}</p>
             )}

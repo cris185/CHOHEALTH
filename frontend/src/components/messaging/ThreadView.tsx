@@ -243,7 +243,7 @@ export default function ThreadView({ threadSid, basePath, i18nNamespace }: {
         )}
       </div>
 
-      <Card className="flex flex-1 flex-col overflow-hidden">
+      <Card className="glass-panel flex flex-1 flex-col overflow-hidden">
         <CardContent className="flex-1 space-y-3 overflow-y-auto py-4">
           {msgs.length === 0 ? (
             <p className="py-12 text-center text-sm text-muted-foreground">{t('noMessagesYet')}</p>

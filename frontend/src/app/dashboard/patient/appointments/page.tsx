@@ -145,7 +145,7 @@ export default function PatientAppointmentsPage() {
     <div className="mx-auto max-w-6xl px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <CalendarDays className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold tracking-tight">{t('dashboard.patient.appointments')}</h2>
+        <h2 className="section-title text-2xl font-bold tracking-tight">{t('dashboard.patient.appointments')}</h2>
       </div>
 
       {toast && (
@@ -166,7 +166,7 @@ export default function PatientAppointmentsPage() {
         </TabsList>
       </Tabs>
 
-      <Card>
+      <Card className="glass-panel">
         <CardContent className="p-0">
           {loading ? (
             <div className="p-6 space-y-3">

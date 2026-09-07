@@ -114,7 +114,7 @@ export default function DoctorDashboard() {
             <Stethoscope className="h-5 w-5 text-primary" />
           </div>
           <div>
-            <h2 className="text-2xl font-bold tracking-tight">{t('dashboard.doctor.title')}</h2>
+            <h2 className="section-title text-2xl font-bold tracking-tight">{t('dashboard.doctor.title')}</h2>
             <p className="text-sm text-muted-foreground">Welcome back, <span className="font-medium text-foreground">Dr. {user.username}</span></p>
           </div>
         </div>
@@ -153,7 +153,7 @@ export default function DoctorDashboard() {
           const Icon = card.icon;
           return (
             <motion.div key={card.label} variants={item}>
-              <Card className="hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
+              <Card className="glass-panel hover:shadow-md transition-all duration-300 hover:-translate-y-0.5">
                 <CardContent className="p-4">
                   <div className="flex items-center gap-3">
                     <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${card.color} transition-transform`}>
@@ -175,7 +175,7 @@ export default function DoctorDashboard() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Schedule Calendar */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }} className="lg:col-span-2">
-          <Card>
+          <Card className="glass-panel">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base flex items-center gap-2">
@@ -217,7 +217,7 @@ export default function DoctorDashboard() {
 
         {/* Today's Appointments List */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
-          <Card className="h-full">
+          <Card className="glass-panel h-full">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
                 <CardTitle className="text-base">Today&apos;s Queue</CardTitle>

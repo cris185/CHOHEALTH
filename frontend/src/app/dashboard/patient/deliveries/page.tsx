@@ -58,7 +58,7 @@ export default function PatientDeliveriesPage() {
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <Truck className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
+        <h1 className="section-title text-2xl font-bold tracking-tight">{t('title')}</h1>
       </div>
 
       {loading ? (
@@ -66,7 +66,7 @@ export default function PatientDeliveriesPage() {
           {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-28 w-full rounded-xl" />)}
         </div>
       ) : deliveries.length === 0 ? (
-        <Card>
+        <Card className="glass-panel">
           <CardContent className="py-16 text-center">
             <Package className="mx-auto h-12 w-12 text-muted-foreground/30" />
             <p className="mt-4 text-sm font-medium text-muted-foreground">{t('empty')}</p>
@@ -84,7 +84,7 @@ export default function PatientDeliveriesPage() {
                 href={`/dashboard/patient/delivery/${d.order_sid}`}
                 className="block"
               >
-                <Card className="transition-shadow hover:shadow-md">
+                <Card className="glass-panel transition-shadow hover:shadow-md">
                   <CardContent className="py-5">
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-start gap-3">

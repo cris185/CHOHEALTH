@@ -29,7 +29,7 @@ export default function ResetPasswordPage() {
   if (!token || !email) {
     return (
       <div className="flex min-h-[calc(100vh-65px)] items-center justify-center bg-muted/30 px-4">
-        <Card className="w-full max-w-md">
+        <Card className="glass-panel w-full max-w-md">
           <CardContent className="py-12 text-center">
             <AlertTriangle className="mx-auto h-12 w-12 text-destructive" />
             <h2 className="mt-4 text-lg font-bold">{t('resetPassword.invalidLink')}</h2>
@@ -70,11 +70,11 @@ export default function ResetPasswordPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2">
           <Image src="/logo.png" alt="CHO Health" width={220} height={80} className="h-20 w-auto" />
-          <h1 className="text-2xl font-bold tracking-tight">{t('common.appName')}</h1>
+          <h1 className="section-title-mark text-2xl font-bold tracking-tight">{t('common.appName')}</h1>
           <p className="text-sm text-muted-foreground">{t('resetPassword.title')}</p>
         </div>
 
-        <Card>
+        <Card className="glass-panel">
           {success ? (
             <CardContent className="py-12 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">

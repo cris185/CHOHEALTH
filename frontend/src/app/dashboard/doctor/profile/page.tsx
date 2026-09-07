@@ -131,11 +131,11 @@ export default function DoctorProfilePage() {
     <div className="mx-auto max-w-2xl px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <User className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold tracking-tight">Edit Profile</h2>
+        <h2 className="section-title text-2xl font-bold tracking-tight">Edit Profile</h2>
       </div>
 
       {/* Profile Info Card */}
-      <Card className="mb-6">
+      <Card className="glass-panel mb-6">
         <CardHeader>
           <div className="flex items-center gap-6">
             <div className="relative">
@@ -192,7 +192,7 @@ export default function DoctorProfilePage() {
       </Card>
 
       {/* Qualifications Card */}
-      <Card>
+      <Card className="glass-panel">
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle className="text-base flex items-center gap-2">

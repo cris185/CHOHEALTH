@@ -11,6 +11,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Bell, Check, Trash2 } from 'lucide-react';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import { cn } from '@/lib/utils';
 
 type FilterStatus = 'all' | 'unread' | 'read';
 type PendingDelete = null | 'all' | { sid: string };
@@ -86,7 +87,7 @@ export default function DoctorNotificationsPage() {
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Bell className="h-6 w-6 text-primary" />
-          <h2 className="text-2xl font-bold tracking-tight">Notifications</h2>
+          <h2 className="section-title text-2xl font-bold tracking-tight">Notifications</h2>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" size="sm" onClick={handleMarkAllRead}>
@@ -110,10 +111,10 @@ export default function DoctorNotificationsPage() {
         {loading ? (
           <div className="space-y-3">{[...Array(5)].map((_, i) => <Skeleton key={i} className="h-20 w-full rounded-xl" />)}</div>
         ) : items.length === 0 ? (
-          <Card><CardContent className="py-16 text-center text-muted-foreground">No notifications</CardContent></Card>
+          <Card className="glass-panel"><CardContent className="py-16 text-center text-muted-foreground">No notifications</CardContent></Card>
         ) : (
           items.map((n) => (
-            <Card key={n.sid} className={!n.is_read ? 'border-l-4 border-l-primary' : ''}>
+            <Card key={n.sid} className={cn('glass-panel', !n.is_read && 'border-l-4 border-l-primary')}>
               <CardContent className="flex items-start justify-between p-4">
                 <div className="flex items-start gap-3 min-w-0 flex-1">
                   {!n.is_read && <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-primary" />}

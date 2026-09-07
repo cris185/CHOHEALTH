@@ -87,7 +87,7 @@ export default function MedicinePaymentSuccessPage() {
   if (error || !verified) {
     return (
       <div className="mx-auto max-w-lg px-4 py-16">
-        <Card>
+        <Card className="glass-panel">
           <CardContent className="py-12 text-center">
             <AlertTriangle className="mx-auto h-12 w-12 text-destructive" />
             <h1 className="mt-4 text-xl font-bold">{t('errorTitle')}</h1>
@@ -103,7 +103,7 @@ export default function MedicinePaymentSuccessPage() {
 
   return (
     <div className="mx-auto max-w-lg px-4 py-16">
-      <Card>
+      <Card className="glass-panel">
         <CardContent className="py-12 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100">
             <CheckCircle className="h-8 w-8 text-emerald-600" />

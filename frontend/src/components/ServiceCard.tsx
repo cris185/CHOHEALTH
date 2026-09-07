@@ -83,7 +83,7 @@ export default function ServiceCard({ service, showBookButton = true, clickable 
   if (clickable) {
     return (
       <Link href={`/dashboard/patient/services/${service.sid}`} className="flex w-full">
-        <Card className="flex h-full w-full flex-col overflow-hidden transition-all hover:shadow-md hover:border-primary/50 cursor-pointer">
+        <Card className="glass-panel flex h-full w-full flex-col overflow-hidden transition-all hover:shadow-md hover:border-primary/50 cursor-pointer">
           {cardContent}
         </Card>
       </Link>
@@ -91,7 +91,7 @@ export default function ServiceCard({ service, showBookButton = true, clickable 
   }
 
   return (
-    <Card className="flex h-full w-full flex-col overflow-hidden">
+    <Card className="glass-panel flex h-full w-full flex-col overflow-hidden">
       {cardContent}
     </Card>
   );

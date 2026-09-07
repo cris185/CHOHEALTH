@@ -114,7 +114,7 @@ export default function PatientReviewsPage() {
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <Star className="h-6 w-6 text-amber-400 fill-amber-400" />
-        <h2 className="text-2xl font-bold tracking-tight">{t('reviews.pageTitle')}</h2>
+        <h2 className="section-title text-2xl font-bold tracking-tight">{t('reviews.pageTitle')}</h2>
       </div>
 
       <Tabs value={tab} onValueChange={(v) => setTab(v as Tab)} className="mb-6">
@@ -179,7 +179,7 @@ export default function PatientReviewsPage() {
 
 function EmptyState({ message }: { message: string }) {
   return (
-    <Card>
+    <Card className="glass-panel">
       <CardContent className="py-16 text-center text-muted-foreground">{message}</CardContent>
     </Card>
   );
@@ -196,7 +196,7 @@ function PendingList({
       {items.map((p) => {
         const img = resolveImageUrl(p.doctor_image, API_BASE);
         return (
-          <Card key={p.sid}>
+          <Card key={p.sid} className="glass-panel">
             <CardContent className="flex items-center justify-between gap-4 p-4">
               <div className="flex items-center gap-3 min-w-0">
                 <InitialsAvatar src={img} name={p.doctor_name ?? ''} className="h-12 w-12 shrink-0" />
@@ -270,7 +270,7 @@ function ReviewCard({
   const patientImg = resolveImageUrl(review.patient_image, API_BASE);
   const doctorImg = resolveImageUrl(review.doctor_image, API_BASE);
   return (
-    <Card>
+    <Card className="glass-panel">
       <CardContent className="p-4">
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-start gap-3 min-w-0 flex-1">

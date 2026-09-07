@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { Inter, Geist_Mono } from "next/font/google";
+import { Inter, Geist_Mono, Lexend } from "next/font/google";
 import { NextIntlClientProvider } from "next-intl";
 import { getLocale, getMessages } from "next-intl/server";
 import { AuthProvider } from "@/context/AuthContext";
@@ -15,6 +15,14 @@ const inter = Inter({
 const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
+});
+
+// Section/card titles — the "where am I" indicator across the dashboard —
+// use this instead of the body face (Inter) so they carry more presence.
+const lexend = Lexend({
+  variable: "--font-lexend",
+  subsets: ["latin"],
+  weight: ["500", "600", "700"],
 });
 
 export const metadata: Metadata = {
@@ -33,7 +41,7 @@ export default async function RootLayout({
   return (
     <html
       lang={locale}
-      className={`${inter.variable} ${geistMono.variable} h-full antialiased`}
+      className={`${inter.variable} ${geistMono.variable} ${lexend.variable} h-full antialiased`}
     >
       <head>
         {/*
@@ -65,13 +73,16 @@ export default async function RootLayout({
         />
       </head>
       <body className="min-h-full flex flex-col">
-        <NextIntlClientProvider messages={messages}>
-          <AuthProvider>
-            <Header />
-            {children}
-            <Toaster richColors position="top-right" />
-          </AuthProvider>
-        </NextIntlClientProvider>
+        <div className="app-wash" aria-hidden="true" />
+        <div className="relative z-10 flex min-h-full flex-1 flex-col">
+          <NextIntlClientProvider messages={messages}>
+            <AuthProvider>
+              <Header />
+              {children}
+              <Toaster richColors position="top-right" />
+            </AuthProvider>
+          </NextIntlClientProvider>
+        </div>
       </body>
     </html>
   );

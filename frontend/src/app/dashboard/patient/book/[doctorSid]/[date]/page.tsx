@@ -119,7 +119,7 @@ export default function DayBookingPage() {
           {t('booking.backToCalendar')}
         </Link>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">{t('booking.selectTime')}</h1>
+        <h1 className="section-title text-2xl font-bold mb-6">{t('booking.selectTime')}</h1>
 
         {/* Doctor + Service Info */}
         <div className="mb-6 flex items-center gap-4 rounded-xl bg-white p-5 shadow-sm border border-gray-100">

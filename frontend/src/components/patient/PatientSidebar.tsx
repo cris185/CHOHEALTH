@@ -69,7 +69,7 @@ export default function PatientSidebar() {
         <div className={cn(
           'flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium transition-all duration-200',
           isActive
-            ? 'bg-primary text-primary-foreground shadow-sm'
+            ? 'bg-primary/15 text-primary font-semibold'
             : hasPendingReviews
               ? 'bg-amber-50 text-amber-900 hover:bg-amber-100'
               : 'text-muted-foreground hover:bg-muted hover:text-foreground'
@@ -77,7 +77,7 @@ export default function PatientSidebar() {
           <Icon className={cn(
             'h-5 w-5',
             isActive
-              ? 'text-primary-foreground'
+              ? 'text-primary'
               : hasPendingReviews
                 ? 'text-amber-500 fill-amber-400 animate-pulse'
                 : 'text-muted-foreground'
@@ -105,7 +105,7 @@ export default function PatientSidebar() {
   };
 
   return (
-    <aside className="hidden w-72 shrink-0 border-r bg-card lg:flex lg:flex-col sticky top-16 h-[calc(100vh-4rem)]">
+    <aside className="glass-panel hidden w-72 shrink-0 lg:flex lg:flex-col sticky top-16 h-[calc(100vh-4rem)]">
       {/* Brand */}
       <div className="flex h-24 items-center justify-center px-5">
         <Image src="/logo.png" alt="CHO Health" width={480} height={160} className="h-20 w-auto" priority />

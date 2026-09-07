@@ -26,7 +26,7 @@ export default function PatientServicesPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-8">
-      <h2 className="mb-6 text-2xl font-bold text-gray-900">{t('services.title')}</h2>
+      <h2 className="section-title mb-6 text-2xl font-bold">{t('services.title')}</h2>
       <ServiceList showBookButton={false} clickable={true} />
     </div>
   );

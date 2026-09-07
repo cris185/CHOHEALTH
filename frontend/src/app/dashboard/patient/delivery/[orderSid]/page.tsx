@@ -88,7 +88,7 @@ export default function DeliveryTrackingPage() {
   if (error || !data) {
     return (
       <div className="mx-auto max-w-3xl px-6 py-10">
-        <Card>
+        <Card className="glass-panel">
           <CardContent className="py-16 text-center text-sm text-muted-foreground">
             {error || t('notFound')}
           </CardContent>
@@ -103,14 +103,14 @@ export default function DeliveryTrackingPage() {
   return (
     <div className="mx-auto max-w-3xl px-6 py-10">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold tracking-tight text-gray-900">{t('title')}</h1>
+        <h1 className="section-title text-2xl font-bold tracking-tight">{t('title')}</h1>
         <p className="mt-1 text-sm text-muted-foreground">
           {t('orderRef')}: <span className="font-mono text-xs">{data.order_sid.slice(0, 8).toUpperCase()}</span>
         </p>
       </div>
 
       {/* Progress bar */}
-      <Card className="mb-6">
+      <Card className="glass-panel mb-6">
         <CardContent className="py-8">
           <div className="relative">
             {/* Track */}
@@ -161,7 +161,7 @@ export default function DeliveryTrackingPage() {
       </Card>
 
       {/* Address block */}
-      <Card className="mb-6">
+      <Card className="glass-panel mb-6">
         <CardContent className="py-5">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div>
@@ -181,7 +181,7 @@ export default function DeliveryTrackingPage() {
       </Card>
 
       {/* Items */}
-      <Card>
+      <Card className="glass-panel">
         <CardContent className="py-5">
           <h2 className="mb-3 text-sm font-semibold text-gray-900">{t('itemsInOrder')}</h2>
           <ul className="divide-y divide-gray-100">

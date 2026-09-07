@@ -61,18 +61,18 @@ export default function Header() {
   const isDashboard = Boolean(user) && pathname.startsWith('/dashboard');
 
   return (
-    <header className="sticky top-0 z-40 border-b bg-background/95 backdrop-blur supports-backdrop-filter:bg-background/60">
+    <header className="glass-panel sticky top-0 z-40">
       <div className="flex h-16 items-center">
         {/* Left: Section title — aligned with sidebar logo when in dashboard */}
         {isDashboard ? (
           <div className="flex items-center pl-6 flex-1 lg:pl-0 lg:w-72 lg:flex-none lg:justify-center lg:shrink-0">
             {user && titleKey && (
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">{t(titleKey)}</h1>
+              <h1 className="section-title text-2xl font-bold tracking-tight">{t(titleKey)}</h1>
             )}
           </div>
         ) : (
           <div className="flex items-center pl-6 flex-1">
-            <Link href="/home" className="text-xl font-bold tracking-tight text-foreground">
+            <Link href="/home" className="section-title-mark text-xl font-bold tracking-tight">
               CHO Health
             </Link>
           </div>

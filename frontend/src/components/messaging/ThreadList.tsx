@@ -56,7 +56,7 @@ export default function ThreadList({ basePath, i18nNamespace }: { basePath: stri
     <div className="space-y-3">
       {threads.map((thread) => (
         <Link key={thread.sid} href={`${basePath}/${thread.sid}`} className="block">
-          <Card className="transition-shadow hover:shadow-md">
+          <Card className="glass-panel transition-shadow hover:shadow-md">
             <CardContent className="flex items-center justify-between gap-3 py-5">
               <div className="flex min-w-0 items-center gap-3">
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">

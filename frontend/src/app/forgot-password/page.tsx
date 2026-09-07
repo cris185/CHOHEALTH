@@ -37,11 +37,11 @@ export default function ForgotPasswordPage() {
       <div className="w-full max-w-md space-y-6">
         <div className="flex flex-col items-center gap-2">
           <Image src="/logo.png" alt="CHO Health" width={220} height={80} className="h-20 w-auto" />
-          <h1 className="text-2xl font-bold tracking-tight">{t('common.appName')}</h1>
+          <h1 className="section-title-mark text-2xl font-bold tracking-tight">{t('common.appName')}</h1>
           <p className="text-sm text-muted-foreground">{t('forgotPassword.title')}</p>
         </div>
 
-        <Card>
+        <Card className="glass-panel">
           {sent ? (
             <CardContent className="py-12 text-center">
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-full bg-emerald-100">

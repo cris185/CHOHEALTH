@@ -227,7 +227,7 @@ export default function MedicinePage() {
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <Pill className="h-6 w-6 text-primary" />
-          <h2 className="text-2xl font-bold tracking-tight">{t('title')}</h2>
+          <h2 className="section-title text-2xl font-bold tracking-tight">{t('title')}</h2>
         </div>
         {cart.count > 0 && (
           <Button size="sm" onClick={() => setCheckoutOpen(true)} className="relative">
@@ -266,7 +266,7 @@ export default function MedicinePage() {
           ) : (
             <div className="space-y-4">
               {records.map((record) => (
-                <Card key={record.sid}>
+                <Card key={record.sid} className="glass-panel">
                   <CardHeader className="pb-2">
                     <div className="flex items-center justify-between gap-3">
                       <CardTitle className="text-sm">{t('issuedBy')}: {record.doctor_name || '—'}</CardTitle>
@@ -374,7 +374,7 @@ export default function MedicinePage() {
                 const inCart = justAdded.has(med.sid);
                 const medImage = resolveImageUrl(med.image, API_BASE);
                 return (
-                  <Card key={med.sid} className="flex h-full flex-col overflow-hidden transition-shadow hover:shadow-md">
+                  <Card key={med.sid} className="glass-panel flex h-full flex-col overflow-hidden transition-shadow hover:shadow-md">
                     {/* Image / initials header */}
                     {medImage ? (
                       <div className="flex h-40 w-full items-center justify-center overflow-hidden bg-gradient-to-br from-slate-50 to-slate-100">
@@ -458,7 +458,7 @@ export default function MedicinePage() {
                   | 'orderStatusReady' | 'orderStatusDispatched' | 'orderStatusDelivered'
                   | 'orderStatusCollected' | 'orderStatusCancelled';
                 return (
-                  <Card key={order.sid}>
+                  <Card key={order.sid} className="glass-panel">
                     <CardContent className="p-4 space-y-3">
                       <div className="flex flex-wrap items-center justify-between gap-3">
                         <div className="flex flex-wrap items-center gap-2">

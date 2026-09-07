@@ -135,7 +135,7 @@ export default function BookLabPage() {
           {t('booking.backToLabs') /* fallback to backToService below if missing */}
         </Link>
 
-        <h1 className="mb-6 text-2xl font-bold text-gray-900">{t('booking.title')}</h1>
+        <h1 className="section-title mb-6 text-2xl font-bold">{t('booking.title')}</h1>
 
         {/* Lab info */}
         <div className="mb-6 flex items-center gap-4 rounded-xl border border-gray-100 bg-white p-5 shadow-sm">

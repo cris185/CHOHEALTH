@@ -91,10 +91,10 @@ export default function PatientProfilePage() {
     <div className="mx-auto max-w-2xl px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <User className="h-6 w-6 text-primary" />
-        <h2 className="text-2xl font-bold tracking-tight">Edit Profile</h2>
+        <h2 className="section-title text-2xl font-bold tracking-tight">Edit Profile</h2>
       </div>
 
-      <Card>
+      <Card className="glass-panel">
         <CardHeader>
           <div className="flex items-center gap-6">
             <div className="relative">

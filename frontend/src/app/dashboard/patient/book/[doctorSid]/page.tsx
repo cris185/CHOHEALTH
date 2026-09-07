@@ -92,7 +92,7 @@ export default function BookingPage() {
           {t('booking.backToService')}
         </Link>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-6">{t('booking.title')}</h1>
+        <h1 className="section-title text-2xl font-bold mb-6">{t('booking.title')}</h1>
 
         {/* Doctor + Service Info */}
         <div className="mb-8 flex items-center gap-4 rounded-xl bg-white p-5 shadow-sm border border-gray-100">

@@ -24,7 +24,7 @@ export default function DoctorMessagesPage() {
     <div className="mx-auto max-w-4xl px-6 py-8">
       <div className="mb-6 flex items-center gap-3">
         <MessageCircle className="h-6 w-6 text-primary" />
-        <h1 className="text-2xl font-bold tracking-tight">{t('title')}</h1>
+        <h1 className="section-title text-2xl font-bold tracking-tight">{t('title')}</h1>
       </div>
       <ThreadList basePath="/dashboard/doctor/messages" i18nNamespace="dashboard.doctor.messagesPage" />
     </div>
