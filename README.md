@@ -162,7 +162,7 @@ flowchart LR
 
     BILL -->|"Checkout, Setup Intents, webhook"| STRIPE
     BILL -->|"Orders API"| PAYPAL
-    AUTH -->|"Transactional email, SMTP"| POSTAL
+    AUTH --> POSTAL
 ```
 
 Each Django app owns its own models and views but shares one PostgreSQL/SQLite database; there is no service boundary between them at the data layer, by design — this is a modular monolith, not a microservice system, which matches the project's actual scale and avoids paying a distributed-systems tax it does not need. Medplum is the one deliberate exception: it is a separate, self-hosted FHIR server, not another table in the same database, because message content and attachments are PHI that belongs behind FHIR's own standards rather than inside the monolith's schema.
