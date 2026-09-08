@@ -12,6 +12,7 @@ Idioma: [English](README.md) | **Español**
 ![Stripe](https://img.shields.io/badge/Stripe-Pagos-635BFF?logo=stripe&logoColor=white)
 ![PayPal](https://img.shields.io/badge/PayPal-Pagos-003087?logo=paypal&logoColor=white)
 ![JWT](https://img.shields.io/badge/Auth-JWT-000000)
+![Medplum](https://img.shields.io/badge/Medplum-Mensajer%C3%ADa%20FHIR-0066CC)
 
 ---
 
@@ -21,13 +22,15 @@ Idioma: [English](README.md) | **Español**
 2. [Decisiones arquitectónicas](#decisiones-arquitectónicas)
 3. [Reglas de negocio](#reglas-de-negocio)
 4. [Arquitectura del sistema](#arquitectura-del-sistema)
-5. [Esquema de base de datos](#esquema-de-base-de-datos)
-6. [Capacidades por rol](#capacidades-por-rol)
-7. [Limitaciones conocidas y comportamiento simulado](#limitaciones-conocidas-y-comportamiento-simulado)
-8. [Stack tecnológico](#stack-tecnológico)
-9. [Roadmap](#roadmap)
-10. [Puesta en marcha](#puesta-en-marcha)
-11. [Aviso](#aviso)
+5. [Mensajería segura (Medplum)](#mensajería-segura-medplum)
+6. [Esquema de base de datos](#esquema-de-base-de-datos)
+7. [Capacidades por rol](#capacidades-por-rol)
+8. [Limitaciones conocidas y comportamiento simulado](#limitaciones-conocidas-y-comportamiento-simulado)
+9. [Stack tecnológico](#stack-tecnológico)
+10. [Roadmap](#roadmap)
+11. [Puesta en marcha](#puesta-en-marcha)
+12. [Agradecimientos](#agradecimientos)
+13. [Aviso](#aviso)
 
 ---
 
@@ -53,7 +56,9 @@ Este es un proyecto de portafolio activo, no un producto terminado — ver [Road
 | El rol se guarda en el usuario (`user_type`) pero nunca se confía en él solo para autorización | Los permisos custom de DRF (`IsDoctor`, `IsPatient`) verifican el rol **y** que el objeto de perfil relacionado realmente exista. Un usuario que declara un rol sin un perfil correspondiente no está autorizado — cerrando un hueco que una verificación ingenua de `request.user.user_type == 'Doctor'` dejaría abierto. |
 | Calificación del doctor desnormalizada, mantenida en sincronía vía señales | El listado/búsqueda de doctores es una ruta de lectura caliente; recalcular un promedio en cada request no escala conforme crecen las reseñas. Una señal `post_save`/`post_delete` sobre `Review` recalcula y persiste el agregado en su lugar. |
 | Selección de base de datos dirigida por `DATABASE_URL` (PostgreSQL en producción vía `dj-database-url`, SQLite como fallback local) | Desarrollo local sin configuración y sin dependencias externas, base de datos de nivel producción en el despliegue sin tocar código. |
-| Cloudinary como backend de medios | Delega el almacenamiento de archivos, transformación y entrega vía CDN en lugar de administrar un servidor de medios propio; se comporta igual en desarrollo local y en producción. |
+| MinIO (almacenamiento de objetos compatible con S3) como backend de medios | Self-hosted, compatible por API con el mismo backend S3 de `django-storages` que el código de producción usaría contra AWS S3 real — almacenamiento de archivos que se comporta igual en desarrollo local y en producción, sin depender de la cuota gratuita de un SaaS externo. |
+| Postal (mailer self-hosted) para correo transaccional vía SMTP | Es dueño de todo el pipeline de entrega (SPF/DKIM, manejo de rebotes, un MTA real) sin depender de los límites de la capa gratuita de una API de terceros, en la misma infraestructura self-hosted que el resto de la plataforma. |
+| Medplum (self-hosted, nativo en FHIR) para mensajería segura paciente-doctor, con Postgres guardando solo metadata | El contenido de los mensajes y los adjuntos son PHI y pertenecen a un sistema construido alrededor de los estándares de cifrado, control de acceso e interoperabilidad de FHIR, no atornillados a la base de datos propia de la app. Postgres (`MessageThread`/`ThreadMessage`) nunca guarda el cuerpo de un mensaje ni un archivo — solo participantes, marcas de tiempo y estado de lectura — de modo que la bandeja puede listar y ordenar sin un viaje de red a Medplum, y una caída de Medplum nunca pone en riesgo los datos propios de la app. Ver [Mensajería segura](#mensajería-segura-medplum). |
 | Wrapper nativo de `fetch` (`src/lib/api.ts`) en lugar de un cliente HTTP más pesado en el frontend | Un único lugar para adjuntar el token JWT, el header `Accept-Language`, y el manejo de multipart — sin dependencia adicional en tiempo de ejecución para lo que es una capa de API delgada y predecible. |
 | Next.js App Router con dos árboles de rutas por rol (`/dashboard/doctor`, `/dashboard/patient`) | El enrutamiento por sistema de archivos mapea directamente los dos recorridos de usuario muy distintos, y cada árbol de dashboard envía solo los componentes que su rol necesita. |
 
@@ -102,6 +107,14 @@ Las reglas siguientes están implementadas en código (restricciones de modelo, 
 - El rol de un usuario (`Patient` / `Doctor` / `Superuser`) es necesario pero no suficiente para autorización — el acceso también requiere que exista el objeto de perfil correspondiente.
 - Los tokens de acceso expiran a los 30 minutos; los tokens de refresco a los 7 días, con rotación activada, de modo que un token de refresco capturado solo puede usarse una vez antes de invalidarse.
 
+**Mensajería segura**
+- Un hilo se abre automáticamente en el momento en que el pago de una cita se completa (es decir, pasa a `Confirmed`) — nunca al reservar, ni al registrarse — con una excepción: una visita exclusivamente de laboratorio o un servicio que no sea `Consultation` nunca genera un hilo, ya que no hay conversación con un doctor que tener.
+- Completar una consulta otorga un período de gracia en vez de cerrar el hilo de inmediato: 14 días por defecto, extendido a 30 días si la consulta dejó pendiente una orden de laboratorio (aún no `Completed`/`Cancelled`) o cualquier receta por seguir — con un tope de 90 días desde que el hilo se abrió por primera vez, para que un resultado de laboratorio que nunca llega no mantenga el canal abierto indefinidamente.
+- Cancelar la cita, por cualquiera de las dos partes, cierra su hilo de inmediato — sin período de gracia para una visita que nunca ocurrió.
+- Un doctor también puede terminar la conversación manualmente en cualquier momento mediante una acción dedicada de "Terminar conversación", independiente del ciclo de vida propio de la cita.
+- El contenido de los mensajes y los adjuntos viven en Medplum, nunca en la base de datos propia de CHOHEALTH — `ThreadMessage` solo guarda quién lo envió, cuándo, y un puntero para recuperar el contenido; el endpoint de listado de hilos deliberadamente excluye cualquier previsualización de mensaje, por la misma razón.
+- Si Medplum no responde, un circuit breaker se activa tras 3 fallos consecutivos y los endpoints de mensajería responden `503` durante 60 segundos; el resto de funcionalidades (reservas, pagos, recetas) no se ven afectadas.
+
 ---
 
 ## Arquitectura del sistema
@@ -116,15 +129,17 @@ flowchart LR
         AUTH["userauths<br/>autenticación JWT"]
         DOC["doctor"]
         PAT["patient"]
-        BASE["base<br/>núcleo clínico / agendamiento"]
+        BASE["base<br/>núcleo clínico / agendamiento / mensajería"]
         BILL["billing"]
+        MED["medplum<br/>cliente FHIR"]
     end
 
-    DB[("PostgreSQL (prod)<br/>SQLite (local)")]
-    MEDIA[("Cloudinary<br/>almacenamiento de medios")]
+    DB[("PostgreSQL (prod)<br/>SQLite (local)<br/>metadata de flujo y de hilos, nunca PHI")]
+    MINIO[("MinIO<br/>almacenamiento de medios compatible con S3")]
     STRIPE[["Stripe"]]
     PAYPAL[["PayPal"]]
-    SENDGRID[["SendGrid"]]
+    POSTAL[["Postal<br/>SMTP self-hosted"]]
+    MEDPLUM[("Medplum<br/>servidor FHIR self-hosted<br/>recursos Communication / Binary")]
 
     FE -->|"REST, token JWT bearer"| AUTH
     FE --> DOC
@@ -138,16 +153,35 @@ flowchart LR
     BASE --> DB
     BILL --> DB
 
-    DOC --> MEDIA
-    PAT --> MEDIA
-    BASE --> MEDIA
+    DOC --> MINIO
+    PAT --> MINIO
+    BASE --> MINIO
+
+    BASE -->|"abrir/cerrar hilo,<br/>enviar/leer mensaje, adjuntos"| MED
+    MED -->|"OAuth2 client_credentials"| MEDPLUM
 
     BILL -->|"Checkout, Setup Intents, webhook"| STRIPE
     BILL -->|"Orders API"| PAYPAL
-    AUTH -->|"Correo transaccional"| SENDGRID
+    AUTH -->|"Correo transaccional, SMTP"| POSTAL
 ```
 
-Cada app de Django es dueña de sus propios modelos y vistas, pero todas comparten una única base de datos PostgreSQL/SQLite; no hay una frontera de servicio entre ellas a nivel de datos, por diseño — esto es un monolito modular, no un sistema de microservicios, lo cual corresponde a la escala real del proyecto y evita pagar un costo de sistemas distribuidos que no necesita.
+Cada app de Django es dueña de sus propios modelos y vistas, pero todas comparten una única base de datos PostgreSQL/SQLite; no hay una frontera de servicio entre ellas a nivel de datos, por diseño — esto es un monolito modular, no un sistema de microservicios, lo cual corresponde a la escala real del proyecto y evita pagar un costo de sistemas distribuidos que no necesita. Medplum es la excepción deliberada: es un servidor FHIR self-hosted separado, no otra tabla más en la misma base de datos, porque el contenido de los mensajes y los adjuntos son PHI que pertenece detrás de los estándares propios de FHIR y no dentro del esquema del monolito.
+
+---
+
+## Mensajería segura (Medplum)
+
+CHOHEALTH antes no tenía ningún canal para que un paciente y un doctor se comunicaran fuera de una consulta agendada — lo más cercano era una `Notification` unidireccional y sin hilo. La mensajería segura cierra ese hueco usando [Medplum](https://github.com/medplum/medplum), una plataforma self-hosted, de código abierto y nativa en FHIR, en lugar de construir infraestructura de chat a medida que tendría que reinventar cifrado, control de acceso e interoperabilidad desde cero.
+
+**Almacenamiento híbrido, por diseño.** Postgres y Medplum son dueños cada uno de una mitad distinta del problema, y ninguno es una caché del otro:
+- **Postgres** (`MessageThread`, `ThreadMessage`, `ThreadRead`) guarda solo metadata de flujo — quién participa en el hilo, cuándo se abre/cierra, contadores de no leídos, marcas de tiempo. Esto es lo que permite listar, ordenar y paginar la bandeja sin una llamada de red a Medplum en cada carga de página.
+- **Medplum** guarda todo lo que realmente es PHI — el texto del mensaje y cualquier adjunto — como recursos FHIR `Communication` y `Binary`. `ThreadMessage.medplum_communication_id` es un puntero, no una copia; el contenido se obtiene de Medplum bajo demanda, y el endpoint de listado de bandeja deliberadamente nunca incluye una previsualización del mensaje.
+
+**Ciclo de vida atado a la necesidad clínica, no a un calendario fijo.** La ventana de escritura de un hilo no es "N días después del checkout" — rastrea si todavía existe una razón plausible para seguir hablando (ver [Reglas de negocio](#reglas-de-negocio) para las reglas exactas del período de gracia), y un doctor también puede cerrar una conversación manualmente en cualquier momento.
+
+**Los adjuntos nunca exponen Medplum directamente.** Un archivo se sube a un recurso `Binary` de Medplum y se referencia desde el payload del `Communication`; las descargas se sirven a través de un proxy de Django (`ThreadAttachmentDownloadView`), que obtiene los bytes del lado del servidor, de modo que un cliente nunca recibe — ni necesita — una URL directa y potencialmente de larga duración de Medplum.
+
+**Degradación controlada.** `MEDPLUM_ENABLED=False` (el valor por defecto) desactiva la función de forma limpia sin impacto en el resto de la app; con la función activada, un circuit breaker aísla una caída de Medplum solo a los endpoints de mensajería (ver [Reglas de negocio](#reglas-de-negocio)).
 
 ---
 
@@ -333,6 +367,39 @@ erDiagram
 
 `Invoice.appointment` e `Invoice.medicine_order` son ambos campos uno-a-uno opcionales; una restricción `CheckConstraint` a nivel de base de datos exige que exactamente uno de los dos esté definido, algo que un diagrama entidad-relación no puede expresar directamente — está impuesto en `billing/models.py`, no solo en el código de la aplicación.
 
+### Mensajería segura
+
+```mermaid
+erDiagram
+    APPOINTMENT ||--o| MESSAGE_THREAD : abre
+    PATIENT ||--o{ MESSAGE_THREAD : "participa en"
+    DOCTOR ||--o{ MESSAGE_THREAD : "participa en"
+    MESSAGE_THREAD ||--o{ THREAD_MESSAGE : contiene
+    MESSAGE_THREAD ||--o{ THREAD_READ : "confirmaciones de lectura"
+
+    MESSAGE_THREAD {
+        string sid
+        string status "Open / Closed"
+        datetime opened_at
+        datetime closes_at "período de gracia, tope de 90 días"
+        datetime last_message_at "desnormalizado para ordenar la bandeja"
+        int message_count
+    }
+    THREAD_MESSAGE {
+        string sid
+        string sender_role "patient / doctor"
+        string medplum_communication_id UK "puntero, no una copia"
+        boolean has_attachments
+        string attachment_binary_id "id de Binary en Medplum"
+        datetime sent_at
+    }
+    THREAD_READ {
+        datetime last_read_at
+    }
+```
+
+Nota lo que falta: ningún cuerpo de mensaje, ningún archivo, ningún campo de `THREAD_MESSAGE` que guarde algo que un paciente o doctor realmente haya escrito. Ese contenido existe únicamente como recursos FHIR en Medplum — esta tabla es incapaz de filtrar PHI de forma deliberada, incluso si se volcara toda la base de datos de Postgres.
+
 ---
 
 ## Capacidades por rol
@@ -347,6 +414,7 @@ erDiagram
 - **Seguimiento de entregas**: listar todos los pedidos en modalidad entrega y consultar un rastreador en vivo por pedido (ver [Limitaciones conocidas](#limitaciones-conocidas-y-comportamiento-simulado) para entender qué tan "en vivo" es realmente).
 - **Pagos**: checkout con Stripe/PayPal, gestión de tarjetas guardadas, historial y totales de pagos propios.
 - **Reseñas**: calificar y comentar sobre cualquier doctor a partir de una cita completada (una por cita, editable), y por separado navegar un feed público con todas las reseñas de todos los doctores, o las de un doctor específico — no limitado a lo que el propio paciente haya enviado.
+- **Mensajería segura**: escribirle al doctor desde el hilo de una cita confirmada (o completada recientemente), ver contadores de no leídos, y enviar adjuntos de imagen/PDF — ver [Mensajería segura](#mensajería-segura-medplum).
 - **Notificaciones**: listar, filtrar por leído/no leído, marcar como leída, borrar.
 
 ### Doctor
@@ -358,9 +426,10 @@ erDiagram
 - **Cancelar/reprogramar**: cancelar una cita confirmada (siempre con reembolso completo al paciente) o reprogramarla contra su propio horario en vivo.
 - **Pagos y estadísticas**: ver sus propios pagos recibidos y estadísticas de ingresos; un dashboard que resume número de citas, número de pacientes, calificación promedio, cantidad de reseñas, ingresos y notificaciones sin leer.
 - **Reseñas**: leer sus propias reseñas vía el endpoint público por doctor; no puede responder, editar ni borrar una reseña de un paciente.
+- **Mensajería segura**: la misma vista de hilo desde el lado del doctor, más la posibilidad de terminar una conversación manualmente antes de que expire su período de gracia.
 - **Notificaciones**: listar, filtrar, marcar como leída, borrar.
 
-### Notificaciones por correo (SendGrid)
+### Notificaciones por correo (Postal, SMTP self-hosted)
 
 Cada correo transaccional es de "disparar y olvidar" — un envío fallido queda registrado en el log pero nunca bloquea la solicitud — y todos comparten una misma plantilla con marca. Existen ocho disparadores distintos de punta a punta:
 
@@ -385,6 +454,7 @@ Siendo transparente sobre qué es una simplificación deliberada de alcance de d
 
 - **El seguimiento de entregas está simulado, no es real.** No hay integración con ningún mensajero, webhook, ni geolocalización en ninguna parte del código. `MedicineDelivery.stage` se calcula en cada consulta a partir del tiempo transcurrido desde que se pagó el pedido — 5 etapas fijas de 30 segundos cada una, unos 2 minutos de punta a punta — no a partir de ningún evento real. El correo de "entrega completada" solo se envía la próxima vez que el propio cliente del paciente consulta el endpoint de seguimiento después de alcanzar la etapa final; no hay ningún worker en segundo plano que garantice su envío si el paciente nunca vuelve a abrir esa pantalla. El siguiente paso real aquí sería un webhook de mensajería (o, como mínimo, una tarea programada en vez de polling disparado por el cliente) — construir eso de verdad, en lugar de la simulación actual, está en el roadmap.
 - **La disponibilidad del doctor todavía no tiene API de autoservicio.** El horario semanal de un doctor (`DoctorSchedule`) actualmente solo puede crearse o editarse desde el admin de Django — no existe un endpoint de "gestionar mi disponibilidad" en el propio dashboard del doctor.
+- **La mensajería segura necesita una instancia de Medplum corriendo para poder enviar mensajes de verdad.** `MEDPLUM_ENABLED=False` (el valor por defecto) desactiva la función de forma limpia — reservas, pagos e historiales clínicos se comportan igual en ambos casos — pero con la función activada, una caída de Medplum sí se manifiesta como un `503` específicamente en los endpoints de mensajería (ver [Mensajería segura](#mensajería-segura-medplum)).
 
 ---
 
@@ -394,11 +464,12 @@ Siendo transparente sobre qué es una simplificación deliberada de alcance de d
 |---|---|
 | Backend | Django 6, Django REST Framework, `djangorestframework-simplejwt` |
 | Base de datos | PostgreSQL (producción, vía `dj-database-url`), SQLite (fallback local) |
-| Almacenamiento de medios | Cloudinary |
+| Almacenamiento de medios | MinIO (compatible con S3, self-hosted) |
+| Mensajería segura | Medplum (self-hosted, nativo en FHIR) |
 | Archivos estáticos | Whitenoise |
 | Panel de administración | Django Jazzmin |
 | Pagos | Stripe (Checkout, Setup Intents, webhooks), PayPal (Orders API) |
-| Correo | SendGrid |
+| Correo | Postal (SMTP self-hosted) |
 | Frontend | Next.js 16 (App Router), React 19, TypeScript |
 | UI | shadcn/ui, `@base-ui/react`, Tailwind CSS v4, Framer Motion |
 | i18n | `next-intl` (español/inglés) |
@@ -407,8 +478,7 @@ Siendo transparente sobre qué es una simplificación deliberada de alcance de d
 
 ## Roadmap
 
-- **Chat seguro paciente-doctor vía [Medplum](https://github.com/medplum/medplum)** — una plataforma de salud de código abierto, nativa en FHIR. Medplum se está adoptando de forma deliberada, no como una función genérica de chat: está construida alrededor de los estándares de cifrado, control de acceso e interoperabilidad que generalmente se espera que cumpla el intercambio de datos de salud, que es el mismo nivel que esta integración busca darle al proyecto, en lugar de construir mensajería a medida que tendría que reinventar esas garantías.
-- Capacidades adicionales sobre Medplum (sincronización estructurada de recursos FHIR, intercambio de datos clínicos) conforme madure la integración.
+- **Sincronización estructurada de recursos FHIR**, extendiendo la integración de Medplum más allá de la mensajería — reflejar citas, recetas y órdenes de laboratorio como recursos FHIR (`Encounter`, `MedicationRequest`, `ServiceRequest`) vía un outbox de escritura diferida, manteniendo a Postgres como fuente de verdad en todo momento.
 - **Una implementación real de seguimiento de entregas**, que reemplace la simulación actual basada en tiempo descrita en [Limitaciones conocidas](#limitaciones-conocidas-y-comportamiento-simulado) — probablemente un webhook de mensajería (o, como mínimo, una tarea programada) que mueva `MedicineDelivery.stage` a partir de eventos reales en vez de tiempo transcurrido en cada lectura.
 - Un endpoint de gestión de horario para el doctor, para que la disponibilidad semanal ya no dependa del admin de Django.
 
@@ -420,7 +490,10 @@ Siendo transparente sobre qué es una simplificación deliberada de alcance de d
 
 - Python 3.13+ (el `venv` incluido usa 3.14)
 - Node.js 18.18+ (se recomienda 20+, por Next.js 16)
-- Claves de API de Stripe, PayPal, Cloudinary y SendGrid
+- Claves de API de Stripe y PayPal
+- Un almacenamiento de objetos compatible con S3 para medios (MinIO o AWS S3)
+- Un servidor SMTP para correo transaccional (self-hosted [Postal](https://github.com/postalserver/postal) en producción; cualquier SMTP funciona en local)
+- Una instancia de [Medplum](https://github.com/medplum/medplum) para mensajería segura — opcional en local, la función se desactiva de forma limpia con `MEDPLUM_ENABLED=False` (ver [Limitaciones conocidas](#limitaciones-conocidas-y-comportamiento-simulado))
 - PostgreSQL (opcional en local — usa SQLite como fallback si `DATABASE_URL` no está definida)
 
 ### Backend
@@ -458,9 +531,11 @@ DATABASE_PASSWORD=
 DATABASE_HOST=
 DATABASE_PORT=
 
-CLOUDINARY_CLOUD_NAME=
-CLOUDINARY_API_KEY=
-CLOUDINARY_API_SECRET=
+AWS_ACCESS_KEY_ID=
+AWS_SECRET_ACCESS_KEY=
+AWS_STORAGE_BUCKET_NAME=
+AWS_S3_ENDPOINT_URL=           # ej. https://minio.ejemplo.com
+AWS_S3_REGION_NAME=us-east-1
 
 STRIPE_SECRET_KEY=
 STRIPE_WEBHOOK_SECRET=
@@ -469,9 +544,17 @@ PAYPAL_CLIENT_ID=
 PAYPAL_CLIENT_SECRET=
 PAYPAL_MODE=sandbox            # o "live"
 
-SENDGRID_API_KEY=
+EMAIL_HOST=
+EMAIL_PORT=25
+EMAIL_USE_TLS=False
+EMAIL_HOST_USER=
+EMAIL_HOST_PASSWORD=
 DEFAULT_FROM_EMAIL=
-EMAIL_DOMAIN=
+
+MEDPLUM_ENABLED=False           # poner True cuando haya una instancia de Medplum accesible
+MEDPLUM_BASE_URL=
+MEDPLUM_CLIENT_ID=
+MEDPLUM_CLIENT_SECRET=
 ```
 
 ### Frontend
@@ -494,6 +577,14 @@ npm run dev
 ```
 
 Frontend disponible en `http://localhost:3000`. Ejecuta backend y frontend en dos terminales — el frontend depende de la API para todo (autenticación, citas, pagos, etc.).
+
+---
+
+## Agradecimientos
+
+La mensajería segura paciente-doctor de CHOHEALTH está construida sobre [Medplum](https://www.medplum.com/) ([github.com/medplum/medplum](https://github.com/medplum/medplum)), una plataforma de salud de código abierto y nativa en FHIR, self-hosted para este proyecto. Los recursos FHIR `Communication` y `Binary` de Medplum hacen el trabajo real de almacenamiento conforme a estándares para el contenido de los mensajes y los adjuntos — exactamente la propiedad que esta integración necesitaba, y no algo que valiera la pena reinventar desde cero. Crédito al equipo de Medplum y a su comunidad de código abierto por construirlo y mantenerlo.
+
+El resto de la infraestructura self-hosted de este proyecto también se apoya en código abierto: [MinIO](https://min.io/) para almacenamiento de medios compatible con S3, y [Postal](https://github.com/postalserver/postal) para correo transaccional — elegidos por la misma razón que Medplum: bloques de construcción maduros por encima de soluciones a medida.
 
 ---
 
