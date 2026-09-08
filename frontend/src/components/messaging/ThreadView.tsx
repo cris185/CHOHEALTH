@@ -229,6 +229,12 @@ export default function ThreadView({ threadSid, basePath, i18nNamespace }: {
           </button>
           <div>
             <h1 className="text-lg font-bold tracking-tight">{thread.other_party_name}</h1>
+            <p className="text-xs text-muted-foreground">
+              {thread.appointment_service_name ? `${thread.appointment_service_name} · ` : ''}
+              {new Date(thread.appointment_date).toLocaleDateString('en-US', {
+                month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York',
+              })}
+            </p>
             {!thread.is_writable && (
               <p className="flex items-center gap-1 text-xs text-muted-foreground">
                 <Lock className="h-3 w-3" /> {t('closed')}

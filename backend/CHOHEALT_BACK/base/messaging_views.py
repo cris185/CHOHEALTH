@@ -52,7 +52,7 @@ def _get_thread_for_user(user, sid):
     otherwise (None, None). Role is 'patient' or 'doctor'.
     """
     try:
-        thread = MessageThread.objects.select_related('patient', 'doctor', 'appointment').get(sid=sid)
+        thread = MessageThread.objects.select_related('patient', 'doctor', 'appointment__service').get(sid=sid)
     except MessageThread.DoesNotExist:
         return None, None
     if hasattr(user, 'patient') and thread.patient_id == user.patient.id:
@@ -88,6 +88,11 @@ def _serialize_thread(thread, user, role=None):
     return {
         'sid': thread.sid,
         'appointment_sid': thread.appointment.sid,
+        # The visit currently governing the thread — updates every time a
+        # new appointment with the same doctor reactivates it, so the inbox
+        # always shows "which visit is this conversation about right now".
+        'appointment_service_name': thread.appointment.service.name if thread.appointment.service_id else None,
+        'appointment_date': thread.appointment.date,
         'status': thread.status,
         'is_writable': thread.is_writable,
         'other_party_name': other_party_name,
@@ -295,7 +300,7 @@ class ThreadListView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        threads = _my_threads(request.user).select_related('patient', 'doctor', 'appointment')
+        threads = _my_threads(request.user).select_related('patient', 'doctor', 'appointment__service')
         return Response([_serialize_thread(t, request.user) for t in threads])
 
 

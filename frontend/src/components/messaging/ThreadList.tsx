@@ -63,13 +63,14 @@ export default function ThreadList({ basePath, i18nNamespace }: { basePath: stri
                   <MessageCircle className="h-5 w-5" />
                 </div>
                 <div className="min-w-0">
-                  <p className="truncate text-sm font-semibold text-gray-900">{thread.other_party_name}</p>
+                  <p className="truncate text-sm font-semibold text-gray-900">
+                    {thread.other_party_name}
+                    {thread.appointment_service_name ? ` - ${thread.appointment_service_name}` : ''}
+                  </p>
                   <p className="mt-0.5 text-xs text-muted-foreground">
-                    {thread.last_message_at
-                      ? new Date(thread.last_message_at).toLocaleDateString('en-US', {
-                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', timeZone: 'America/New_York',
-                        })
-                      : t('noMessagesYet')}
+                    {new Date(thread.appointment_date).toLocaleDateString('en-US', {
+                      month: 'short', day: 'numeric', year: 'numeric', timeZone: 'America/New_York',
+                    })}
                   </p>
                 </div>
               </div>

@@ -950,6 +950,10 @@ export interface PaginatedResponse<T> {
 export interface ThreadItem {
   sid: string;
   appointment_sid: string;
+  // The visit currently governing this thread — updates each time a new
+  // appointment with the same doctor reactivates it.
+  appointment_service_name: string | null;
+  appointment_date: string;
   status: 'Open' | 'Closed';
   is_writable: boolean;
   other_party_name: string;

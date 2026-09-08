@@ -179,10 +179,17 @@ class MedicalRecord(models.Model):
 # Postgres owns thread/participant/read-state metadata — none of it PHI.
 # Medplum owns the actual message text (and, later, attachments) as FHIR
 # `Communication` resources, never exposed via a Django endpoint of its own.
-# One thread per Appointment, opened automatically when the appointment is
-# confirmed (see `open_message_thread_for_appointment`, called from the
-# payment-success and free-lab-booking flows) and closed a few days after
-# the visit completes, or immediately if the appointment is cancelled.
+#
+# One thread per (patient, doctor) pair, not per Appointment — a second
+# appointment with the same doctor reactivates the existing thread (full
+# message history included) instead of starting a new, disconnected one.
+# `MessageThread.appointment` tracks whichever appointment currently governs
+# the thread's lifecycle (grace period, display label); it gets repointed to
+# the new appointment on each reactivation. Opened automatically when an
+# appointment is confirmed (see `open_message_thread_for_appointment`,
+# called from the payment-success and free-lab-booking flows) and closed a
+# few days after the visit completes, or immediately if cancelled — see
+# `close_message_thread_for_appointment`.
 # ============================================================================
 
 THREAD_STATUS = (
@@ -209,11 +216,20 @@ SENDER_ROLE_CHOICES = (
 
 class MessageThread(models.Model):
     sid = models.CharField(max_length=22, unique=True, default=shortuuid.uuid, editable=False)
-    appointment = models.OneToOneField(Appointment, on_delete=models.CASCADE, related_name='message_thread')
+    # The appointment currently governing this thread — repointed on each
+    # reactivation, so it's whichever visit is most relevant right now, not
+    # necessarily the one that first opened the thread.
+    appointment = models.ForeignKey(Appointment, on_delete=models.CASCADE, related_name='message_threads')
     patient = models.ForeignKey(Patient, on_delete=models.CASCADE, related_name='message_threads')
     doctor = models.ForeignKey(Doctor, on_delete=models.CASCADE, related_name='message_threads')
     status = models.CharField(max_length=10, choices=THREAD_STATUS, default='Open')
     opened_at = models.DateTimeField(auto_now_add=True)
+    # Set the first time this specific (patient, doctor) thread reactivates
+    # for a later appointment. Null on a thread still on its first visit.
+    # The grace-period hard cap is measured from here (falling back to
+    # `opened_at`) rather than from `opened_at` alone — otherwise a thread
+    # reused for years would eventually be capped by its very first opening.
+    reactivated_at = models.DateTimeField(null=True, blank=True)
     # Set once the visit is over (Completed → grace period, Cancelled → now).
     # Null means "still open, no end in sight yet".
     closes_at = models.DateTimeField(null=True, blank=True)
@@ -222,7 +238,12 @@ class MessageThread(models.Model):
     message_count = models.PositiveIntegerField(default=0)
 
     class Meta:
-        ordering = ['-last_message_at', '-opened_at']
+        ordering = ['-appointment__date', '-last_message_at']
+        constraints = [
+            # One conversation per care relationship — a new appointment with
+            # the same doctor reactivates it instead of creating a sibling.
+            models.UniqueConstraint(fields=['patient', 'doctor'], name='unique_thread_per_patient_doctor'),
+        ]
 
     @property
     def is_writable(self):
@@ -272,12 +293,18 @@ class ThreadRead(models.Model):
 
 
 def open_message_thread_for_appointment(appointment):
-    """Idempotently open the secure-messaging thread for a just-confirmed
-    appointment. No-op if there's no doctor attached (e.g. a free prescribed
-    lab pickup, which has `doctor=None`), if this is a lab visit rather than
-    a consultation (`doctor` then points at lab staff, not a treating
-    physician — see `Appointment.lab_test`/`Service.service_type`), or if a
-    thread already exists.
+    """Idempotently open (or reactivate) the secure-messaging thread for a
+    just-confirmed appointment. No-op if there's no doctor attached (e.g. a
+    free prescribed lab pickup, which has `doctor=None`), if this is a lab
+    visit rather than a consultation (`doctor` then points at lab staff, not
+    a treating physician — see `Appointment.lab_test`/`Service.service_type`).
+
+    One thread per (patient, doctor): if this pair already has a thread —
+    open, in its grace period, or closed from a previous visit — it's
+    reactivated and repointed at this appointment rather than creating a
+    sibling thread. Calling this again for the exact same appointment that
+    already governs the thread is a no-op (idempotent under webhook retries,
+    and doesn't undo a doctor's manual close for that same visit).
     """
     if not appointment.doctor_id:
         return None
@@ -285,13 +312,23 @@ def open_message_thread_for_appointment(appointment):
         return None
     if appointment.service_id and appointment.service.service_type != 'Consultation':
         return None
-    if hasattr(appointment, 'message_thread'):
-        return appointment.message_thread
-    return MessageThread.objects.create(
-        appointment=appointment,
-        patient=appointment.patient,
-        doctor=appointment.doctor,
-    )
+
+    thread = MessageThread.objects.filter(patient=appointment.patient, doctor_id=appointment.doctor_id).first()
+    if thread is None:
+        return MessageThread.objects.create(
+            appointment=appointment,
+            patient=appointment.patient,
+            doctor=appointment.doctor,
+        )
+    if thread.appointment_id == appointment.id:
+        return thread
+
+    thread.appointment = appointment
+    thread.status = 'Open'
+    thread.closes_at = None
+    thread.reactivated_at = timezone.now()
+    thread.save(update_fields=['appointment', 'status', 'closes_at', 'reactivated_at'])
+    return thread
 
 
 def close_message_thread_for_appointment(appointment, *, immediately=False):
@@ -301,13 +338,18 @@ def close_message_thread_for_appointment(appointment, *, immediately=False):
     channel open for a visit that never happened. Otherwise (visit
     completed), grants a grace period — longer if there's a pending lab
     order or a prescription to follow up on — capped at
-    `MESSAGE_THREAD_MAX_DAYS` from when the thread first opened. Call this
-    only once the medical record / prescription / lab order for the visit
-    already exist, so the pending-follow-up check sees them.
+    `MESSAGE_THREAD_MAX_DAYS` from the current reactivation window (or the
+    thread's original opening, on its first visit). Call this only once the
+    medical record / prescription / lab order for the visit already exist,
+    so the pending-follow-up check sees them.
+
+    No-op if a later appointment has already reactivated this (patient,
+    doctor) thread — a stale/out-of-order call shouldn't override the
+    window a newer visit already opened.
     """
-    if not hasattr(appointment, 'message_thread'):
+    thread = MessageThread.objects.filter(patient=appointment.patient, doctor_id=appointment.doctor_id).first()
+    if thread is None or thread.appointment_id != appointment.id:
         return
-    thread = appointment.message_thread
 
     if immediately:
         thread.status = 'Closed'
@@ -322,7 +364,8 @@ def close_message_thread_for_appointment(appointment, *, immediately=False):
         if has_pending_lab or has_prescription:
             grace_days = MESSAGE_THREAD_GRACE_DAYS_WITH_FOLLOWUP
 
-    hard_cap = thread.opened_at + timedelta(days=MESSAGE_THREAD_MAX_DAYS)
+    window_start = thread.reactivated_at or thread.opened_at
+    hard_cap = window_start + timedelta(days=MESSAGE_THREAD_MAX_DAYS)
     thread.closes_at = min(timezone.now() + timedelta(days=grace_days), hard_cap)
     thread.save(update_fields=['closes_at'])
 
