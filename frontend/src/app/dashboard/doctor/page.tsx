@@ -9,6 +9,7 @@ import {
   appointments as appointmentsApi,
   doctors as doctorsApi,
   doctorStats as doctorStatsApi,
+  doctorProfile as doctorProfileApi,
   DoctorAppointmentItem,
   DoctorScheduleEntry,
   DoctorStats,
@@ -43,6 +44,7 @@ export default function DoctorDashboard() {
   const [selectedDate, setSelectedDate] = useState(() => getTodayInNY());
   const [appts, setAppts] = useState<DoctorAppointmentItem[]>([]);
   const [schedule, setSchedule] = useState<DoctorScheduleEntry | null>(null);
+  const [doctorSid, setDoctorSid] = useState<string | null>(null);
   const [apptLoading, setApptLoading] = useState(true);
   const [modalSid, setModalSid] = useState<string | null>(null);
 
@@ -56,18 +58,21 @@ export default function DoctorDashboard() {
     if (user) {
       const token = localStorage.getItem('access_token') || '';
       doctorStatsApi.get(token).then(setStats).catch(() => {});
+      // `user.sid` is the User model's own sid, not the linked Doctor
+      // profile's — the schedule endpoint needs the latter.
+      doctorProfileApi.get(token).then((p) => setDoctorSid(p.sid)).catch(() => {});
     }
   }, [user]);
 
   useEffect(() => {
-    if (user?.sid) {
-      doctorsApi.schedule(user.sid).then((schedules) => {
+    if (doctorSid) {
+      doctorsApi.schedule(doctorSid).then((schedules) => {
         const dayOfWeek = new Date(selectedDate + 'T00:00:00').getDay();
         const pythonDay = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
         setSchedule(schedules.find((s) => s.day_of_week === pythonDay) || null);
       }).catch(() => setSchedule(null));
     }
-  }, [user, selectedDate]);
+  }, [doctorSid, selectedDate]);
 
   useEffect(() => {
     if (user) {

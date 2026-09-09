@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from django.conf import settings as django_settings
 from django.db.models import Avg, Sum
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 
 from .models import Doctor, DoctorQualification, DoctorSchedule, Notification
@@ -23,7 +24,7 @@ class DoctorScheduleListView(generics.ListAPIView):
     pagination_class = None
 
     def get_queryset(self):
-        doctor = Doctor.objects.get(sid=self.kwargs['sid'])
+        doctor = get_object_or_404(Doctor, sid=self.kwargs['sid'])
         return DoctorSchedule.objects.filter(doctor=doctor, is_active=True)
 
 

@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/context/AuthContext';
-import { appointments as appointmentsApi, doctors as doctorsApi, DoctorAppointmentItem, DoctorScheduleEntry } from '@/lib/api';
+import { appointments as appointmentsApi, doctors as doctorsApi, doctorProfile as doctorProfileApi, DoctorAppointmentItem, DoctorScheduleEntry } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import DoctorDayCalendar from '@/components/booking/DoctorDayCalendar';
@@ -34,6 +34,7 @@ export default function DoctorAppointmentsPage() {
   const [allSchedules, setAllSchedules] = useState<DoctorScheduleEntry[]>([]);
   const [schedule, setSchedule] = useState<DoctorScheduleEntry | null>(null);
   const [modalSid, setModalSid] = useState<string | null>(null);
+  const [doctorSid, setDoctorSid] = useState<string | null>(null);
 
   useEffect(() => {
     if (authLoading) return;
@@ -41,12 +42,21 @@ export default function DoctorAppointmentsPage() {
     if (user.user_type !== 'Doctor') { router.replace('/dashboard'); return; }
   }, [user, authLoading]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Load all schedule entries once
+  // Resolve the doctor's own sid — `user.sid` is the User model's, not the
+  // linked Doctor profile's, and the schedule endpoint needs the latter.
   useEffect(() => {
-    if (user?.sid) {
-      doctorsApi.schedule(user.sid).then(setAllSchedules).catch(() => setAllSchedules([]));
+    if (user) {
+      const token = localStorage.getItem('access_token') || '';
+      doctorProfileApi.get(token).then((p) => setDoctorSid(p.sid)).catch(() => {});
     }
   }, [user]);
+
+  // Load all schedule entries once
+  useEffect(() => {
+    if (doctorSid) {
+      doctorsApi.schedule(doctorSid).then(setAllSchedules).catch(() => setAllSchedules([]));
+    }
+  }, [doctorSid]);
 
   // Load appointments for the visible month
   useEffect(() => {
