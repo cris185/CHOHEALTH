@@ -1456,4 +1456,13 @@ export const adminApi = {
 
   userDeliveries: (userSid: string, token: string): Promise<{ user: AdminUser; deliveries: AdminDelivery[] }> =>
     fetchAPI(`/admin/users/${userSid}/deliveries/`, { token }),
+
+  // Manual override — bypasses the proximity/offer cascade entirely, for
+  // when it ran out of candidates (or an admin just wants to step in).
+  assignCourier: (deliverySid: string, courierSid: string, token: string): Promise<AdminDelivery> =>
+    fetchAPI(`/admin/deliveries/${deliverySid}/assign/`, {
+      method: 'POST',
+      body: JSON.stringify({ courier_sid: courierSid }),
+      token,
+    }),
 };

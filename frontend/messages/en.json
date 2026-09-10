@@ -659,8 +659,16 @@
         "colAddress": "Address",
         "colStage": "Stage",
         "colCreated": "Created",
+        "colAction": "Action",
         "unassigned": "Unassigned",
-        "empty": "No deliveries yet."
+        "empty": "No deliveries yet.",
+        "pickCourier": "Pick a courier...",
+        "assign": "Assign",
+        "assigning": "Assigning...",
+        "assignError": "Could not assign this courier. Please try again.",
+        "onDuty": "on duty",
+        "onBreak": "on break",
+        "offDuty": "off duty"
       },
       "userDetailPage": {
         "back": "Back to users",

@@ -659,8 +659,16 @@
         "colAddress": "Dirección",
         "colStage": "Etapa",
         "colCreated": "Creada",
+        "colAction": "Acción",
         "unassigned": "Sin asignar",
-        "empty": "Todavía no hay entregas."
+        "empty": "Todavía no hay entregas.",
+        "pickCourier": "Elige un repartidor...",
+        "assign": "Asignar",
+        "assigning": "Asignando...",
+        "assignError": "No se pudo asignar este repartidor. Intenta de nuevo.",
+        "onDuty": "en turno",
+        "onBreak": "en descanso",
+        "offDuty": "fuera de turno"
       },
       "userDetailPage": {
         "back": "Volver a usuarios",
