@@ -23,6 +23,7 @@ from delivery.geocoding import geocode_address
 from doctor.models import Doctor, Notification
 from .stripe_customer import get_or_create_stripe_customer
 from .models import Invoice, InvoiceLineItem, Payment
+from base.services.meeting import ensure_meeting_link
 from userauths.services.email_service import (
     send_appointment_confirmation_email,
     send_medicine_order_pickup_email,
@@ -366,8 +367,9 @@ def _process_appointment_payment_success(appointment, payment_method, gateway_ch
                 paid_at=timezone.now(),
             )
 
+            meeting_fields = ensure_meeting_link(appointment)
             appointment.status = 'Confirmed'
-            appointment.save(update_fields=['status'])
+            appointment.save(update_fields=['status', *meeting_fields])
     except IntegrityError:
         raise SlotAlreadyBookedError(
             'Another booking confirmed this slot before payment completed. '

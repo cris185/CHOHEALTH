@@ -7,6 +7,7 @@ from .views import (
 )
 from .medical_views import (
     DoctorAppointmentStatusUpdateView, DoctorAppointmentCompleteView,
+    AppointmentMeetingTokenView,
     MedicalRecordCreateView, PrescriptionCreateView, LabOrderCreateView,
     MedicationListView, LabTestListView, LabTestCatalogView,
     LabTestDetailView, BookDirectLabAppointmentView,
@@ -49,6 +50,7 @@ urlpatterns = [
     path('appointments/<str:sid>/cancel/', PatientAppointmentCancelView.as_view(), name='patient-appointment-cancel'),
     path('appointments/<str:sid>/reschedule/', PatientAppointmentRescheduleView.as_view(), name='patient-appointment-reschedule'),
     path('appointments/<str:sid>/delete/', PatientAppointmentDeleteView.as_view(), name='patient-appointment-delete'),
+    path('appointments/<str:sid>/meeting-token/', AppointmentMeetingTokenView.as_view(), name='appointment-meeting-token'),
     path('appointments/book-prescribed-lab/', BookPrescribedLabAppointmentView.as_view(), name='book-prescribed-lab'),
     path('branches/', BranchListView.as_view(), name='branch-list'),
 

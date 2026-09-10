@@ -292,6 +292,15 @@ DEFAULT_FROM_EMAIL = os.getenv('DEFAULT_FROM_EMAIL', '')
 FRONTEND_URL = os.getenv('FRONTEND_URL', 'http://localhost:3000')
 PASSWORD_RESET_TOKEN_EXPIRY_HOURS = 1
 
+# Jitsi Meet (self-hosted, JWT-secured) — video calls for virtual appointments
+JITSI_BASE_URL = os.getenv('JITSI_BASE_URL', 'https://meet.cristianpuentes.com')
+JITSI_APP_ID = os.getenv('JITSI_APP_ID', 'chohealth')
+JITSI_APP_SECRET = os.getenv('JITSI_APP_SECRET', '')
+JITSI_JWT_AUDIENCE = os.getenv('JITSI_JWT_AUDIENCE', 'jitsi')
+JITSI_JWT_SUB = os.getenv('JITSI_JWT_SUB', 'meet.cristianpuentes.com')
+JITSI_JWT_TTL_MINUTES = int(os.getenv('JITSI_JWT_TTL_MINUTES', '120'))
+JITSI_ROOM_SALT = os.getenv('JITSI_ROOM_SALT', SECRET_KEY)
+
 # Medplum (FHIR server, self-hosted). Disabled by default so local dev / CI
 # doesn't need a running Medplum instance — messaging endpoints degrade to
 # 503 when this is False, everything else in the app is unaffected.

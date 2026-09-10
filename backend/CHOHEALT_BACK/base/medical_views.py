@@ -1,11 +1,13 @@
+from datetime import timedelta
 from decimal import Decimal
 from rest_framework import generics, status, filters
 from rest_framework.response import Response
 from rest_framework.views import APIView
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 
 from doctor.permissions import IsDoctor
 from patient.permissions import IsPatient
@@ -18,6 +20,7 @@ from .models import (
     open_message_thread_for_appointment, close_message_thread_for_appointment,
 )
 from .pickup_code import generate_unique_pickup_code, generate_qr_png_bytes
+from .services.meeting import ensure_meeting_link, build_room_name, build_join_token, build_join_url
 from billing.models import Invoice, InvoiceLineItem
 from userauths.services.email_service import send_medicine_order_pickup_email
 from .medical_serializers import (
@@ -71,18 +74,12 @@ class DoctorAppointmentStatusUpdateView(APIView):
         update_fields = ['status']
         appointment.status = new_status
 
-        # Stash the meeting link on the appointment the moment the doctor
-        # starts a virtual consultation, then email the patient so they can
-        # click through and join without going back to the app.
-        is_virtual_start = (
-            new_status == 'In Progress'
-            and appointment.mode == 'Virtual'
-            and serializer.validated_data.get('meeting_link')
-        )
+        # The meeting link is generated server-side at payment confirmation
+        # (see `ensure_meeting_link` in `billing/payment_views.py`). This is
+        # just a lazy backfill for appointments confirmed before that existed.
+        is_virtual_start = new_status == 'In Progress' and appointment.mode == 'Virtual'
         if is_virtual_start:
-            appointment.meeting_link = serializer.validated_data['meeting_link']
-            appointment.meeting_provider = serializer.validated_data.get('meeting_provider', '')
-            update_fields.extend(['meeting_link', 'meeting_provider'])
+            update_fields.extend(ensure_meeting_link(appointment))
 
         appointment.save(update_fields=update_fields)
 
@@ -114,6 +111,84 @@ class DoctorAppointmentStatusUpdateView(APIView):
             'detail': f'Appointment status updated to {new_status}.',
             'status': new_status,
             'meeting_link': appointment.meeting_link,
+        })
+
+
+class AppointmentMeetingTokenView(APIView):
+    """Mint a short-lived Jitsi JWT for whoever is joining a virtual
+    appointment's video call — the patient or the doctor on that appointment.
+
+    The persisted `meeting_link` points at a CHOHEALTH page (`/join/<sid>`),
+    not at Jitsi directly, because a raw Jitsi URL is useless once JWT auth is
+    on: it always needs a fresh, per-user, signed token appended. That page
+    calls this endpoint and redirects to the URL it returns.
+    """
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, sid):
+        try:
+            appointment = Appointment.objects.select_related(
+                'patient__user', 'doctor', 'service',
+            ).get(sid=sid)
+        except Appointment.DoesNotExist:
+            return Response({'detail': 'Appointment not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        user = request.user
+        is_patient = hasattr(user, 'patient') and appointment.patient_id == user.patient.id
+        is_doctor = hasattr(user, 'doctor') and appointment.doctor_id == user.doctor.id
+        if not (is_patient or is_doctor):
+            return Response({'detail': 'Not your appointment.'}, status=status.HTTP_403_FORBIDDEN)
+
+        if appointment.mode != 'Virtual':
+            return Response({'detail': 'This appointment is not virtual.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if appointment.status not in ('Confirmed', 'In Progress'):
+            return Response(
+                {'detail': f'Cannot join an appointment in "{appointment.status}" state.'},
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        bookable = appointment.service or appointment.lab_test
+        duration = bookable.duration_minutes if bookable else 30
+        window_start = appointment.date - timedelta(minutes=15)
+        window_end = appointment.date + timedelta(minutes=duration) + timedelta(minutes=60)
+        now = timezone.now()
+        if now < window_start or now > window_end:
+            return Response({
+                'detail': 'This consultation room is not open yet.',
+                'available_from': window_start,
+            }, status=status.HTTP_403_FORBIDDEN)
+
+        update_fields = ensure_meeting_link(appointment)
+        if update_fields:
+            appointment.save(update_fields=update_fields)
+
+        if is_doctor:
+            participant = appointment.doctor
+            display_name = f'Dr. {participant.first_name} {participant.first_last_name}'
+            user_id = participant.sid
+        else:
+            participant = appointment.patient
+            display_name = participant.full_name
+            user_id = participant.sid
+        avatar = participant.image.url if participant.image and hasattr(participant.image, 'url') else ''
+
+        token, expires_at = build_join_token(
+            appointment,
+            user_id=user_id,
+            display_name=display_name,
+            email=user.email,
+            avatar=avatar,
+            is_moderator=is_doctor,
+        )
+
+        return Response({
+            'room': build_room_name(appointment),
+            'domain': settings.JITSI_BASE_URL.replace('https://', '').replace('http://', ''),
+            'url': build_join_url(appointment, token),
+            'token': token,
+            'expires_at': expires_at,
+            'is_moderator': is_doctor,
         })
 
 

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
+import { toast } from 'sonner';
 import { AppointmentItem, reviews as reviewsApi, ReviewItem } from '@/lib/api';
 import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
@@ -18,7 +19,7 @@ import {
   User,
   AlertCircle,
   X,
-  ExternalLink,
+  Copy,
   Star,
 } from 'lucide-react';
 
@@ -72,6 +73,13 @@ export default function PatientAppointmentDetailModal({
   const appointmentDate = new Date(appointment.date);
   const isVirtual = appointment.mode === 'Virtual';
   const canRate = appointment.status === 'Completed' && !!appointment.doctor_sid;
+  const canJoin = isVirtual && ['Confirmed', 'In Progress'].includes(appointment.status) && !!appointment.meeting_link;
+
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(appointment.meeting_link)
+      .then(() => toast.success('Link copied'))
+      .catch(() => toast.error('Could not copy the link'));
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -160,20 +168,19 @@ export default function PatientAppointmentDetailModal({
 
           {/* Branch or Meeting link */}
           {isVirtual ? (
-            appointment.meeting_link && (
+            canJoin && (
               <div className="flex items-start gap-3">
                 <Video className="h-4 w-4 text-muted-foreground mt-0.5" />
-                <div className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1 space-y-2">
                   <p className="text-xs font-medium text-muted-foreground">Meeting link</p>
-                  <a
-                    href={appointment.meeting_link}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-primary hover:underline inline-flex items-center gap-1 break-all"
-                  >
-                    {appointment.meeting_provider || 'Join meeting'}
-                    <ExternalLink className="h-3 w-3 shrink-0" />
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" onClick={() => window.open(`/join/${appointment.sid}`, '_blank', 'noopener')}>
+                      Join consultation
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={handleCopyLink}>
+                      <Copy className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
               </div>
             )

@@ -230,7 +230,8 @@ class DoctorAppointmentListSerializer(serializers.ModelSerializer):
             'sid', 'date', 'status', 'mode',
             'patient_name', 'patient_image',
             'service_name', 'service_duration',
-            'branch_name', 'issues', 'symptoms', 'notes', 'created_at',
+            'branch_name', 'meeting_link', 'meeting_provider',
+            'issues', 'symptoms', 'notes', 'created_at',
         )
 
     def get_patient_name(self, obj):

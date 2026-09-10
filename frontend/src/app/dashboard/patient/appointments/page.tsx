@@ -254,7 +254,7 @@ export default function PatientAppointmentsPage() {
                         </div>
                       ) : canCancelWithRefund(a) ? (
                         <div className="flex justify-end gap-2">
-                          {a.mode === 'Virtual' && a.status === 'In Progress' && a.meeting_link && (
+                          {a.mode === 'Virtual' && ['Confirmed', 'In Progress'].includes(a.status) && a.meeting_link && (
                             <a
                               href={a.meeting_link}
                               target="_blank"
@@ -281,7 +281,7 @@ export default function PatientAppointmentsPage() {
                             Cancel
                           </Button>
                         </div>
-                      ) : a.mode === 'Virtual' && a.status === 'In Progress' && a.meeting_link ? (
+                      ) : a.mode === 'Virtual' && ['Confirmed', 'In Progress'].includes(a.status) && a.meeting_link ? (
                         <div className="flex justify-end">
                           <a
                             href={a.meeting_link}

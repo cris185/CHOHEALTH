@@ -355,10 +355,21 @@ export interface DoctorAppointmentItem {
   service_name: string | null;
   service_duration: number;
   branch_name: string | null;
+  meeting_link: string;
+  meeting_provider: string;
   issues: string;
   symptoms: string;
   notes: string;
   created_at: string;
+}
+
+export interface MeetingTokenResponse {
+  room: string;
+  domain: string;
+  url: string;
+  token: string;
+  expires_at: string;
+  is_moderator: boolean;
 }
 
 export interface DoctorAppointmentDetail extends DoctorAppointmentItem {
@@ -415,13 +426,15 @@ export const appointments = {
     sid: string,
     newStatus: 'In Progress' | 'Completed' | 'Cancelled' | 'No Show',
     token: string,
-    extra?: { meeting_link?: string; meeting_provider?: string },
   ): Promise<{ detail: string; status: string; meeting_link?: string }> =>
     fetchAPI(`/appointments/doctor/${sid}/status/`, {
       method: 'PATCH',
-      body: JSON.stringify({ status: newStatus, ...extra }),
+      body: JSON.stringify({ status: newStatus }),
       token,
     }),
+
+  meetingToken: (sid: string, token: string): Promise<MeetingTokenResponse> =>
+    fetchAPI(`/appointments/${sid}/meeting-token/`, { token }),
 
   doctorComplete: (
     sid: string,
