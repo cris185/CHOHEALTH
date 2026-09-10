@@ -13,6 +13,7 @@ Language: **English** | [Espanol](README.es.md)
 ![PayPal](https://img.shields.io/badge/PayPal-Payments-003087?logo=paypal&logoColor=white)
 ![JWT](https://img.shields.io/badge/Auth-JWT-000000)
 ![Medplum](https://img.shields.io/badge/Medplum-FHIR%20Messaging-0066CC)
+![Expo](https://img.shields.io/badge/Expo-Courier%20App-000020?logo=expo&logoColor=white)
 
 ---
 
@@ -23,14 +24,15 @@ Language: **English** | [Espanol](README.es.md)
 3. [Business rules](#business-rules)
 4. [System architecture](#system-architecture)
 5. [Secure messaging (Medplum)](#secure-messaging-medplum)
-6. [Database schema](#database-schema)
-7. [Capabilities by role](#capabilities-by-role)
-8. [Known limitations and simulated behavior](#known-limitations-and-simulated-behavior)
-9. [Tech stack](#tech-stack)
-10. [Roadmap](#roadmap)
-11. [Getting started](#getting-started)
-12. [Acknowledgments](#acknowledgments)
-13. [Disclaimer](#disclaimer)
+6. [Real-time delivery tracking](#real-time-delivery-tracking)
+7. [Database schema](#database-schema)
+8. [Capabilities by role](#capabilities-by-role)
+9. [Known limitations and simulated behavior](#known-limitations-and-simulated-behavior)
+10. [Tech stack](#tech-stack)
+11. [Roadmap](#roadmap)
+12. [Getting started](#getting-started)
+13. [Acknowledgments](#acknowledgments)
+14. [Disclaimer](#disclaimer)
 
 ---
 
@@ -60,7 +62,10 @@ This is an active portfolio project, not a finished product — see [Roadmap](#r
 | Postal (self-hosted mailer) for transactional email over SMTP | Owns the full delivery pipeline (SPF/DKIM, bounce handling, a real MTA) without depending on a third-party API's free-tier limits, on the same self-hosted infrastructure as the rest of the platform. |
 | Medplum (self-hosted, FHIR-native) for secure patient-doctor messaging, with Postgres holding only metadata | Message content and attachments are PHI and belong in a system built around FHIR's encryption, access-control and interoperability standards, not bolted onto the app's own database. Postgres (`MessageThread`/`ThreadMessage`) never stores a message body or file — only participants, timestamps and read state — so the inbox can list and sort without a Medplum round trip, and a Medplum outage never risks the app's own data. See [Secure messaging](#secure-messaging-medplum). |
 | Native `fetch` wrapper (`src/lib/api.ts`) instead of a heavier HTTP client on the frontend | One place to attach the JWT bearer token, the `Accept-Language` header, and multipart handling — no extra runtime dependency for what is a thin, predictable API layer. |
-| Next.js App Router with two role-scoped route trees (`/dashboard/doctor`, `/dashboard/patient`) | File-system routing maps directly onto the two very different user journeys, and each dashboard tree ships only the components its role needs. |
+| Next.js App Router with role-scoped route trees (`/dashboard/doctor`, `/dashboard/patient`, `/dashboard/delivery`, `/dashboard/admin`) | File-system routing maps directly onto each very different user journey, and each dashboard tree ships only the components its role needs. |
+| A separate Expo (React Native) app for the courier role, instead of a browser tab | Background GPS tracking with the app backgrounded or the phone locked is unreliable-to-impossible from a browser's Geolocation API, but is a first-class native capability (`expo-location` background tasks). The courier's web dashboard is intentionally read-only (history, stats, profile) — every action that depends on live location happens only in the native app. See [Real-time delivery tracking](#real-time-delivery-tracking). |
+| Delivery assignment and offer expiry driven entirely by real events (a payment succeeding, a courier declining, a delivery completing), not a scheduled worker | Consistent with the rest of the codebase (see [Secure messaging](#secure-messaging-medplum)'s circuit breaker and the billing webhook) — this project deliberately has no Celery/cron anywhere. An expired offer is detected lazily, the next time anything reads or acts on it, rather than by a background task racing the clock. |
+| A patient-confirmed map pin (search + drag, like a food-delivery app's address picker) instead of geocoding free-text address input after the fact | Free-text geocoding against a service like Nominatim can silently resolve to the wrong precision — a whole neighbourhood instead of a building — with no visible signal that it happened. Capturing the coordinate the patient actually confirmed on a map is strictly more reliable than trying to recover it from text later, and is what the geofence and the courier's live map are built on. |
 
 ---
 
@@ -91,6 +96,13 @@ The rules below are enforced in code (model constraints, `clean()` validators, o
   - **Dedicated "request delivery" flow** (bundles every unclaimed prescribed medication from one prescription into a single delivery order): always charges a flat shipping fee on top, regardless of whether the bundled medications price at `$0` or at full cost. This is the only path in the system where shipping is charged.
 - A pharmacy order's pickup code is generated once, only at the moment it becomes `Paid` (online payment or fully covered by a prescription); it stays unset while payment is pending, so an unpaid order can never be collected at a branch.
 
+**Delivery**
+- A courier's shift status (`off_duty` / `on_duty` / `on_break`) gates whether the assignment algorithm considers them a candidate at all — an off-duty or on-break courier is never offered a delivery.
+- A courier cannot start a break, or clock out, while a delivery is actively assigned to them (any stage before `delivered`). One delivery at a time, start to finish, before the next shift-state change is allowed.
+- A delivery offer expires 45 seconds after it's made if the courier doesn't respond; a decline or an expiry both cascade to the next-closest available courier, never back to someone who already saw that same delivery.
+- The "arrived" geofence check is a soft warning, not a hard block — it still marks the delivery `delivered` either way. A GPS fix (courier or geocoder) can be off by enough to produce a false negative, and a courier who is genuinely there shouldn't be stuck unable to close out a delivery.
+- Proof of delivery requires both a photo and the courier's GPS position at that exact moment — neither alone is accepted.
+
 **Reviews**
 - A review can only be submitted for an appointment with status `Completed`, and only by the patient who owns that appointment; that same patient can later edit or delete it, and only one review exists per appointment.
 - Review visibility is public, not limited to the author: any patient can browse a feed of every review across every doctor, and a specific doctor's individual reviews are readable even by an unauthenticated visitor. The doctor catalog a patient browses before booking already surfaces each doctor's aggregate rating and review count — a patient is expected to shop by reputation before ever being seen by that doctor, not just rate one afterward.
@@ -104,7 +116,7 @@ The rules below are enforced in code (model constraints, `clean()` validators, o
 
 **Identity and access**
 - Authentication is by email, not username; usernames are derived automatically and de-duplicated with a numeric suffix.
-- A user's role (`Patient` / `Doctor` / `Superuser`) is necessary but not sufficient for authorization — access also requires the matching profile object to exist.
+- A user's role (`Patient` / `Doctor` / `Delivery` / `Superuser`) is necessary but not sufficient for authorization — access also requires the matching profile object to exist (a `Superuser` is the one exception, gated on Django's own `is_superuser` flag instead of a profile).
 - Access tokens expire after 30 minutes; refresh tokens after 7 days, with rotation enabled so a captured refresh token can be used only once before it is invalidated.
 
 **Secure messaging**
@@ -121,15 +133,18 @@ The rules below are enforced in code (model constraints, `clean()` validators, o
 
 ```mermaid
 flowchart LR
-    subgraph client["Client"]
-        FE["Next.js 16 (App Router)<br/>React 19 + TypeScript"]
+    subgraph client["Clients"]
+        FE["Next.js 16 (App Router)<br/>React 19 + TypeScript<br/>patient / doctor / admin, and a<br/>read-only courier dashboard"]
+        MOBILE["Expo (React Native)<br/>courier app — background GPS,<br/>offers, stage actions"]
     end
 
     subgraph api["Django REST API"]
         AUTH["userauths<br/>JWT authentication"]
         DOC["doctor"]
         PAT["patient"]
-        BASE["base<br/>scheduling / clinical core / messaging"]
+        BASE["base<br/>scheduling / clinical core / messaging / delivery actions"]
+        DELIV["delivery<br/>courier role, shifts, assignment"]
+        ADMIN["adminpanel<br/>read-only superuser views"]
         BILL["billing"]
         MED["medplum<br/>FHIR client"]
     end
@@ -140,18 +155,26 @@ flowchart LR
     PAYPAL[["PayPal"]]
     POSTAL[["Postal<br/>self-hosted SMTP"]]
     MEDPLUM[("Medplum<br/>self-hosted FHIR server<br/>Communication / Binary resources")]
+    NOMINATIM[["Nominatim (OpenStreetMap)<br/>address search / geocoding"]]
 
     FE -->|"REST, JWT bearer token"| AUTH
     FE --> DOC
     FE --> PAT
     FE --> BASE
     FE --> BILL
+    FE --> ADMIN
+    FE -->|"search / reverse geocode<br/>(browser, address picker)"| NOMINATIM
+    MOBILE -->|"REST, JWT bearer token"| AUTH
+    MOBILE --> DELIV
+    MOBILE -->|"start-transit / arrived"| BASE
 
     AUTH --> DB
     DOC --> DB
     PAT --> DB
     BASE --> DB
     BILL --> DB
+    DELIV --> DB
+    ADMIN --> DB
 
     DOC --> MINIO
     PAT --> MINIO
@@ -162,6 +185,7 @@ flowchart LR
 
     BILL -->|"Checkout, Setup Intents, webhook"| STRIPE
     BILL -->|"Orders API"| PAYPAL
+    BILL -->|"geocode delivery address<br/>on order creation"| NOMINATIM
     AUTH --> POSTAL
 ```
 
@@ -185,6 +209,33 @@ CHOHEALTH previously had no channel for a patient and doctor to communicate outs
 
 ---
 
+## Real-time delivery tracking
+
+Pharmacy delivery used to be simulated — `MedicineDelivery.stage` advanced through 5 fixed stages on a timer, computed from elapsed time on every poll, with no courier, no GPS, and no real-world event driving it. It's now a real tracked delivery, end to end: a third user role (`Delivery`), a proximity-based assignment algorithm, a companion native app for the courier, and a live map for the patient.
+
+**Why a native app instead of another web dashboard.** The one hard requirement — a courier's position updating while the app is backgrounded or the phone is locked — is not something a browser tab can do reliably. `expo-location`'s background task API can. The courier's web dashboard (`/dashboard/delivery`) still exists, but deliberately does nothing that depends on live location: it's read-only history, stats and profile. Every action that needs GPS — clocking in, receiving an offer, marking a delivery in transit or arrived — happens in the Expo app.
+
+**Assignment: proximity-ranked, one offer at a time, no scheduled worker.**
+1. The instant a delivery-method order is paid, `try_assign()` runs (via `transaction.on_commit`, so it only fires once the payment is actually committed) and ranks every on-duty, idle courier by haversine distance to the pickup branch.
+2. The closest candidate gets a `DeliveryOffer` with a 45-second window and, when EAS push is configured, a push notification; until then (or as a resilience fallback), the courier's app polls for a pending offer every 5 seconds.
+3. A decline, or the 45 seconds elapsing, cascades to the next-closest courier who hasn't already seen this exact delivery — never back to someone who already declined or timed out on it.
+4. If nobody is free, the delivery just sits unassigned; the same `try_assign()` reruns automatically the next time any courier frees up (finishes a delivery) or an offer is declined/expires. There is no Celery/cron anywhere in this flow, matching the rest of the codebase (see [Business rules](#business-rules)) — every trigger is a real event, and a stale offer is treated as expired lazily, the next time it's read or acted on.
+
+**The address picker replaces blind geocoding.** The original plan geocoded the patient's free-text delivery address after the fact (via Nominatim). In practice this failed silently in exactly the way you'd expect: a specific street address it couldn't resolve precisely fell back to matching the entire surrounding neighbourhood — a coordinate that *looked* precise but was off by close to a kilometer, discovered by literally standing at the resolved point and watching the geofence report "you're far away." The fix was to stop guessing after the fact: the patient now confirms an exact point on a map (search-as-you-type via Nominatim, or drag/tap a pin directly — the same pattern as a food-delivery app's checkout) at order time, and that confirmed coordinate is what the courier's live map and the "arrived" geofence check both use. The backend still geocodes as a fallback for any order that somehow skips the picker, but now discards a match that isn't at least street-level precision (`place_rank`) instead of accepting a neighbourhood-wide guess.
+
+**What the courier app does** (`mobile/`, Expo Router + TypeScript):
+- Clock in/out and breaks, blocked while a delivery is actively assigned (see [Business rules](#business-rules)).
+- Background GPS ping every ~12 seconds while on duty, independent of whether a delivery is active — proximity ranking needs a position even for an idle courier.
+- Accept/decline an offer with a live countdown.
+- Two stage actions: "Start Transit" (this is the moment the patient's map goes live) and "Mark Arrived" (requires a photo of the delivered package plus the courier's GPS position at that instant — both together are the proof of delivery, neither alone).
+- A soft, non-blocking geofence warning if the courier's position doesn't match the confirmed delivery point closely enough — still completes the delivery either way, since a GPS fix can legitimately be off.
+
+**What the patient sees.** The tracking page stays a plain-text stepper (`picked_up` → `on_the_way` → `delivered`) until the courier starts transit — no map, nothing to show yet. Once they're on the way, a live map (`react-leaflet` + OpenStreetMap tiles, no API key) appears with the courier's position and the confirmed delivery pin; if the courier's last ping goes stale (>60s), the UI says so explicitly ("last known location N minutes ago") instead of silently freezing the pin in place.
+
+**What's still a known gap, not a limitation of the design:** the Expo app hasn't been linked to an EAS project yet, so push notifications aren't live in production — the 5-second poll on the courier's home screen is the fallback and makes the app fully usable without push, just not instant. Setting up `eas build`/`eas submit` for a real installable app (instead of Expo Go) is the natural next step.
+
+---
+
 ## Database schema
 
 The schema is split across four diagrams that mirror the Django apps, to keep each one legible. Primary keys are UUID-like short IDs (`sid`) exposed to the API; numeric IDs stay internal.
@@ -201,7 +252,7 @@ erDiagram
     USER {
         string sid
         string email UK
-        string user_type "Patient / Doctor / Superuser"
+        string user_type "Patient / Doctor / Delivery / Superuser"
         string otp
     }
     DOCTOR {
@@ -298,6 +349,13 @@ erDiagram
     MEDICATION ||--o{ MEDICINE_ORDER_ITEM : "referenced by"
     MEDICINE_ORDER ||--o| MEDICINE_DELIVERY : "tracked by"
     PRESCRIPTION_ITEM ||--o| MEDICINE_ORDER_ITEM : fulfills
+    BRANCH ||--o{ MEDICINE_DELIVERY : "dispatched from"
+    DELIVERY_PERSON ||--o{ MEDICINE_DELIVERY : carries
+    USER ||--o| DELIVERY_PERSON : "has profile"
+    DELIVERY_PERSON ||--o{ DELIVERY_SHIFT : clocks
+    DELIVERY_SHIFT ||--o{ DELIVERY_BREAK : includes
+    MEDICINE_DELIVERY ||--o{ DELIVERY_OFFER : offers
+    DELIVERY_PERSON ||--o{ DELIVERY_OFFER : receives
 
     MEDICINE_ORDER {
         string sid
@@ -305,6 +363,8 @@ erDiagram
         decimal subtotal
         decimal shipping_fee
         decimal total
+        decimal delivery_latitude "set by the patient's map picker"
+        decimal delivery_longitude
         string pickup_code UK "set only once Paid"
     }
     MEDICINE_ORDER_ITEM {
@@ -313,9 +373,36 @@ erDiagram
         decimal total
     }
     MEDICINE_DELIVERY {
-        string stage "picked_up ... delivered"
+        string stage "picked_up / on_the_way / delivered"
+        decimal dest_latitude "confirmed point, or geocoded fallback"
+        decimal dest_longitude
+        file proof_photo
+        decimal proof_latitude "courier's GPS at 'arrived'"
+        decimal proof_longitude
         datetime started_at
         datetime delivered_at
+    }
+    DELIVERY_PERSON {
+        string sid
+        string on_duty_status "off_duty / on_duty / on_break"
+        decimal current_latitude "last background ping"
+        decimal current_longitude
+        datetime location_updated_at
+        string expo_push_token
+    }
+    DELIVERY_SHIFT {
+        datetime clock_in_at
+        datetime clock_out_at "null = shift active"
+    }
+    DELIVERY_BREAK {
+        datetime started_at
+        datetime ended_at "null = break active"
+    }
+    DELIVERY_OFFER {
+        string status "pending / accepted / declined / expired"
+        datetime offered_at
+        datetime responded_at
+        datetime expires_at "45s window"
     }
 ```
 
@@ -411,7 +498,7 @@ Note what is absent: no message body, no file, no `THREAD_MESSAGE` field holding
 - **Clinical history**: read-only access to own medical records, prescriptions, and lab orders/results; download prescription and lab-order PDFs on demand.
 - **Pharmacy**: browse the over-the-counter medication catalog (public), buy medications — over-the-counter or prescribed — through a cart supporting pickup or delivery, or bundle every pending prescribed medication into one dedicated delivery request.
 - **Lab tests**: browse the public lab catalog (flagged with a "free for you" badge when an unclaimed matching prescription exists), book a lab directly when it doesn't require a prescription, or for free against one that does.
-- **Delivery tracking**: list every delivery-mode order and poll a live per-order tracker (see [Known limitations](#known-limitations-and-simulated-behavior) for how "live" is implemented).
+- **Delivery tracking**: list every delivery-mode order and poll a live per-order tracker — a plain-text stepper until the courier starts transit, then a live map with the courier's position and the confirmed delivery pin (see [Real-time delivery tracking](#real-time-delivery-tracking)).
 - **Payments**: Stripe/PayPal checkout, manage saved cards, personal payment history and totals.
 - **Reviews**: rate and comment on any doctor from a completed appointment (one per appointment, editable), and separately browse a public feed of every review across every doctor, or one doctor's reviews specifically — not limited to the patient's own submissions.
 - **Secure messaging**: message the doctor from a confirmed (or recently completed) appointment's thread, see unread counts, and send image/PDF attachments — see [Secure messaging](#secure-messaging-medplum).
@@ -429,6 +516,19 @@ Note what is absent: no message body, no file, no `THREAD_MESSAGE` field holding
 - **Secure messaging**: same thread view from the doctor's side, plus the ability to end a conversation manually before its grace period would otherwise expire.
 - **Notifications**: list, filter, mark as read, delete.
 
+### Delivery (courier)
+
+- **Account**: register, log in — the Expo app only (the web login rejects a non-courier account and vice versa; see [Real-time delivery tracking](#real-time-delivery-tracking)).
+- **Shift**: clock in/out, start/end a break — blocked while a delivery is actively assigned (see [Business rules](#business-rules)).
+- **Offers**: receive a delivery offer (push, or the app's own poll), accept or decline against a live countdown.
+- **Active delivery**: mark a picked-up delivery "in transit" (this is what makes the patient's map go live), then "arrived" with a proof photo and GPS position.
+- **Web dashboard** (`/dashboard/delivery`, read-only): shift stats (today's/completed deliveries, average time), delivery history, profile — no action here depends on live location, by design.
+
+### Superuser (Admin)
+
+- **Web dashboard** (`/dashboard/admin`, read-only for now): every user across every role with their basic profile info, every delivery platform-wide, and a per-user delivery history (as the patient who received them, or the courier who ran them).
+- Everything else — creating doctors/patients, editing catalogs, assigning schedules — still goes through the Django admin (Jazzmin); extending the frontend dashboard to cover that is on the [Roadmap](#roadmap).
+
 ### Email notifications (Postal, self-hosted SMTP)
 
 Every transactional email is fire-and-forget — a failed send is logged, never blocks the request — and shares one branded template. Eight distinct triggers exist end to end:
@@ -442,7 +542,7 @@ Every transactional email is fire-and-forget — a failed send is logged, never 
 | Virtual visit started | Doctor marks a virtual appointment `In Progress` | Meeting link |
 | Pharmacy order ready for pickup | A pickup-method order is paid | QR pickup code, invoice PDF |
 | Pharmacy order shipped | A delivery-method order is paid | Invoice PDF, tracking link |
-| Delivery completed | The patient's own tracking poll detects the final stage | — |
+| Delivery completed | The courier marks a delivery "arrived" | — |
 
 There is currently no welcome email on signup and no "lab results ready" email — both are natural additions, not yet built.
 
@@ -452,9 +552,10 @@ There is currently no welcome email on signup and no "lab results ready" email �
 
 Being upfront about what's a deliberate demo-scope simplification versus a real integration:
 
-- **Delivery tracking is simulated, not real.** There is no courier integration, webhook, or geolocation anywhere in the codebase. `MedicineDelivery.stage` is computed on every poll from elapsed time since the order was paid — 5 fixed stages, 30 seconds each, about 2 minutes end to end — not from any real-world event. The "delivery completed" email is only sent the next time the patient's own client polls the tracking endpoint after the final stage is reached; there is no background worker guaranteeing it fires if the patient never reopens that screen. The next real step here would be a courier webhook (or at minimum a scheduled task instead of client-triggered polling) — genuinely building that out, rather than the current simulation, is on the roadmap.
 - **Doctor availability has no self-service API yet.** A doctor's weekly schedule (`DoctorSchedule`) can currently only be created or edited through the Django admin — there is no "manage my availability" endpoint on the doctor's own dashboard.
 - **Secure messaging requires a running Medplum instance to actually send messages.** `MEDPLUM_ENABLED=False` (the default) disables the feature cleanly — booking, payments, and clinical records behave identically either way — but with it enabled, a Medplum outage does surface as a `503` on the messaging endpoints specifically (see [Secure messaging](#secure-messaging-medplum)).
+- **The courier app isn't linked to an EAS project yet**, so push notifications for delivery offers aren't live — the app's own 5-second poll is the fallback path and keeps it fully usable in the meantime (see [Real-time delivery tracking](#real-time-delivery-tracking)).
+- **The admin dashboard is read-only.** Creating doctors/patients, editing the catalog, and assigning schedules still requires the Django admin (Jazzmin) — the frontend dashboard currently only lists users and deliveries.
 
 ---
 
@@ -473,14 +574,19 @@ Being upfront about what's a deliberate demo-scope simplification versus a real 
 | Frontend | Next.js 16 (App Router), React 19, TypeScript |
 | UI | shadcn/ui, `@base-ui/react`, Tailwind CSS v4, Framer Motion |
 | i18n | `next-intl` (English/Spanish) |
+| Mobile (courier app) | Expo (Expo Router), React Native, TypeScript |
+| Live map | `react-leaflet` + OpenStreetMap tiles (no API key) |
+| Geocoding / address search | Nominatim (OpenStreetMap, no API key) |
 
 ---
 
 ## Roadmap
 
 - **Structured FHIR resource sync**, extending the Medplum integration beyond messaging — mirroring appointments, prescriptions and lab orders as FHIR resources (`Encounter`, `MedicationRequest`, `ServiceRequest`) via a write-through outbox, with Postgres remaining the source of truth throughout.
-- **A real delivery-tracking implementation**, replacing the current time-based simulation described in [Known limitations](#known-limitations-and-simulated-behavior) — likely a courier webhook (or, at minimum, a scheduled background task) driving `MedicineDelivery.stage` off real events instead of elapsed time on read.
 - A doctor-facing schedule management endpoint, so weekly availability no longer requires the Django admin.
+- **EAS build/submit for the courier app**, so it's a real installable app with working push notifications instead of running through Expo Go with a polling fallback (see [Real-time delivery tracking](#real-time-delivery-tracking)).
+- **Full CRUD from the admin dashboard** — creating doctors and patients, editing the catalog, assigning schedules — currently still Django-admin-only (see [Capabilities by role](#capabilities-by-role)).
+- A doctor payment/payout model — how doctors themselves get paid for completed appointments — designed but not yet built.
 
 ---
 
@@ -578,6 +684,27 @@ npm run dev
 
 Frontend available at `http://localhost:3000`. Run backend and frontend in two terminals — the frontend depends on the API for everything (authentication, appointments, payments, and so on).
 
+### Mobile (courier app)
+
+Only needed to run the delivery role's native side — the web app runs fully without this.
+
+```powershell
+cd mobile
+npm install
+```
+
+`mobile/.env`:
+
+```
+EXPO_PUBLIC_API_URL=http://localhost:8000/api
+```
+
+```powershell
+npx expo start
+```
+
+Open in [Expo Go](https://expo.dev/go) on a physical device — background location and camera don't work reliably in a simulator/emulator, and push notifications need an EAS project (not yet configured; the app's own polling fallback keeps it usable regardless — see [Real-time delivery tracking](#real-time-delivery-tracking)).
+
 ---
 
 ## Acknowledgments
@@ -585,6 +712,8 @@ Frontend available at `http://localhost:3000`. Run backend and frontend in two t
 Secure patient-doctor messaging in CHOHEALTH is built on [Medplum](https://www.medplum.com/) ([github.com/medplum/medplum](https://github.com/medplum/medplum)), an open-source, FHIR-native healthcare platform, self-hosted for this project. Medplum's `Communication` and `Binary` FHIR resources do the actual work of standards-compliant storage for message content and attachments — exactly the property this integration needed, and not something worth reinventing from scratch. Credit to the Medplum team and its open-source community for building and maintaining it.
 
 The rest of this project's self-hosted infrastructure also leans on open source: [MinIO](https://min.io/) for S3-compatible media storage and [Postal](https://github.com/postalserver/postal) for transactional email — chosen for the same reason as Medplum, mature building blocks over bespoke ones.
+
+Delivery tracking's live map and address search run entirely on the [OpenStreetMap](https://www.openstreetmap.org/copyright) project — map tiles and geocoding via its [Nominatim](https://nominatim.org/) service, rendered with [Leaflet](https://leafletjs.com/)/[react-leaflet](https://react-leaflet.js.org/) — free, no API key, maintained by its community of volunteer contributors. The courier's native app is built on [Expo](https://expo.dev/), whose managed React Native tooling (`expo-location`'s background task API in particular) is what makes real background GPS tracking practical without hand-rolling native modules for iOS and Android separately.
 
 ---
 
