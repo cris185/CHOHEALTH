@@ -33,6 +33,12 @@ DEBUG = os.getenv('DEBUG', 'True') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
+# In production this app sits behind Coolify's Traefik proxy, which terminates
+# TLS and forwards plain HTTP internally — without this, request.is_secure()
+# is always False, which breaks CSRF validation (and would mark the CSRF/
+# session cookies as insecure) even on a real HTTPS request.
+SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
 
 # Application definition
 
@@ -255,6 +261,15 @@ SIMPLE_JWT = {
 CORS_ALLOWED_ORIGINS = os.getenv(
     'CORS_ALLOWED_ORIGINS',
     'http://localhost:3000'
+).split(',')
+
+# Needed for Django admin (Jazzmin) login to work in production — without
+# this, the proxy setup above means Django computes the request's own origin
+# as http://, which never matches the https:// Origin/Referer a real browser
+# sends, and every POST (including login) is rejected as a CSRF failure.
+CSRF_TRUSTED_ORIGINS = os.getenv(
+    'CSRF_TRUSTED_ORIGINS',
+    'https://chohealth-api.cristianpuentes.com,https://chohealth.cristianpuentes.com,http://localhost:3000'
 ).split(',')
 
 # Stripe
