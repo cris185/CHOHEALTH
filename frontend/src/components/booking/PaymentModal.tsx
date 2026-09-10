@@ -268,9 +268,8 @@ export default function PaymentModal({
               className="group flex w-full items-center gap-4 rounded-xl border-2 border-border px-5 py-4 transition-all duration-200 hover:border-[#635BFF] hover:bg-[#635BFF]/5 hover:shadow-sm disabled:opacity-50"
             >
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#635BFF]/10 group-hover:bg-[#635BFF]/20 transition-colors">
-                <svg className="h-6 w-6" viewBox="0 0 32 32" fill="none">
-                  <path fillRule="evenodd" clipRule="evenodd" d="M14.903 11.2c0-1.12.921-1.554 2.449-1.554 2.19 0 4.953.663 7.143 1.846V4.87C22.229 3.94 20.008 3.2 17.352 3.2 11.627 3.2 8 6.16 8 10.88c0 7.291 10.034 6.131 10.034 9.28 0 1.326-1.152 1.754-2.766 1.754-2.392 0-5.443-.983-7.862-2.309v6.72C9.94 27.52 12.55 28.8 15.268 28.8c5.869 0 9.903-2.902 9.903-7.68-.029-7.866-10.268-6.474-10.268-9.92z" fill="#635BFF"/>
-                </svg>
+                {/* eslint-disable-next-line @next/next/no-img-element -- static brand mark, not worth next/image's overhead */}
+                <img src="/payment/stripe.svg" alt="Stripe" className="h-6 w-6" />
               </div>
               <div className="text-left flex-1">
                 <p className="text-sm font-semibold text-foreground">Pay with Card</p>
@@ -297,10 +296,8 @@ export default function PaymentModal({
               className="group flex w-full items-center gap-4 rounded-xl border-2 border-border px-5 py-4 transition-all duration-200 hover:border-[#0070BA] hover:bg-[#0070BA]/5 hover:shadow-sm disabled:opacity-50"
             >
               <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#0070BA]/10 group-hover:bg-[#0070BA]/20 transition-colors">
-                <svg className="h-6 w-6" viewBox="0 0 32 32" fill="none">
-                  <path d="M25.7 9.7c.3 1.8 0 3-1 4.2-1.2 1.3-3.3 1.9-5.8 1.9h-.8c-.4 0-.8.3-.9.7l-.5 3.4-.2 1c0 .3-.3.6-.6.6h-3.3c-.3 0-.5-.3-.4-.6l.1-.4 1.2-7.6.1-.4c.1-.4.5-.7.9-.7h1.9c3.8 0 6.8-1.5 7.6-6 .1-.3.1-.6.2-.8.6.4 1.2.9 1.5 1.7z" fill="#009CDE"/>
-                  <path d="M24.2 8c-.4-1.1-1.4-2-2.8-2.5-.7-.3-1.5-.4-2.4-.4h-7.4c-.4 0-.8.3-.9.7l-3.1 19.4c0 .4.2.7.6.7h4.4l1.1-7-.1.2c.1-.4.5-.7.9-.7h1.8c3.6 0 6.4-1.5 7.2-5.7 0-.1 0-.3.1-.4.2-1.4.2-2.5-.4-3.3z" fill="#003087"/>
-                </svg>
+                {/* eslint-disable-next-line @next/next/no-img-element -- static brand mark, not worth next/image's overhead */}
+                <img src="/payment/paypal.svg" alt="PayPal" className="h-6 w-6" />
               </div>
               <div className="text-left flex-1">
                 <p className="text-sm font-semibold text-foreground">Pay with PayPal</p>
