@@ -52,8 +52,10 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt.token_blacklist',
     'corsheaders',
 
+    'adminpanel',
     'base',
     'billing',
+    'delivery',
     'doctor',
     'medplum',
     'patient',

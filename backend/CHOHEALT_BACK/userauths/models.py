@@ -34,6 +34,7 @@ class UserManager(BaseUserManager):
 USER_TYPE = (
     ('Patient', 'Patient'),
     ('Doctor', 'Doctor'),
+    ('Delivery', 'Delivery'),
     ('Superuser', 'Superuser'),
 )
 

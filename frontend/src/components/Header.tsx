@@ -34,6 +34,11 @@ const ROUTE_TITLES: Record<string, string> = {
   '/dashboard/doctor/notifications': 'dashboard.doctor.nav.notifications',
   '/dashboard/doctor/payments': 'dashboard.doctor.nav.payments',
   '/dashboard/doctor/profile': 'dashboard.doctor.nav.profile',
+  '/dashboard/delivery': 'dashboard.delivery.nav.dashboard',
+  '/dashboard/delivery/history': 'dashboard.delivery.nav.history',
+  '/dashboard/delivery/profile': 'dashboard.delivery.nav.profile',
+  '/dashboard/admin': 'dashboard.admin.nav.users',
+  '/dashboard/admin/deliveries': 'dashboard.admin.nav.deliveries',
 };
 
 function getTitleKey(pathname: string): string | null {
@@ -57,7 +62,10 @@ export default function Header() {
   const isAuthPage = authPaths.some((p) => pathname.startsWith(p));
 
   const titleKey = getTitleKey(pathname);
-  const profileHref = user?.user_type === 'Doctor' ? '/dashboard/doctor/profile' : '/dashboard/patient/profile';
+  const profileHref =
+    user?.user_type === 'Doctor' ? '/dashboard/doctor/profile'
+    : user?.user_type === 'Delivery' ? '/dashboard/delivery/profile'
+    : '/dashboard/patient/profile';
   const isDashboard = Boolean(user) && pathname.startsWith('/dashboard');
 
   return (
@@ -82,8 +90,16 @@ export default function Header() {
         <div className={`flex items-center gap-3 pr-6 ${isDashboard ? 'lg:flex-1 lg:justify-end' : ''}`}>
           {user && (
             <>
-              <NotificationBell />
-              <Separator orientation="vertical" className="h-6" />
+              {/* Delivery's actionable notifications (new offers) live in the
+                  Expo app via push — the web bell only knows the patient/
+                  doctor notification endpoints. Admin has no notifications
+                  of its own yet either. */}
+              {user.user_type !== 'Delivery' && user.user_type !== 'Superuser' && (
+                <>
+                  <NotificationBell />
+                  <Separator orientation="vertical" className="h-6" />
+                </>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger className="flex items-center gap-2 rounded-full p-1 transition-colors hover:bg-muted focus:outline-none focus:ring-2 focus:ring-ring">
                   <Avatar>
@@ -101,11 +117,16 @@ export default function Header() {
                     <span className="text-sm font-medium">{user.email.split('@')[0]}</span>
                     <span className="text-xs text-muted-foreground">{user.email}</span>
                   </div>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem onClick={() => router.push(profileHref)}>
-                    <UserIcon className="mr-2 h-4 w-4" />
-                    {t(`dashboard.${user.user_type.toLowerCase()}.nav.profile`)}
-                  </DropdownMenuItem>
+                  {/* Admin has no profile page yet — just users/deliveries. */}
+                  {user.user_type !== 'Superuser' && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={() => router.push(profileHref)}>
+                        <UserIcon className="mr-2 h-4 w-4" />
+                        {t(`dashboard.${user.user_type.toLowerCase()}.nav.profile`)}
+                      </DropdownMenuItem>
+                    </>
+                  )}
                   <DropdownMenuSeparator />
                   <DropdownMenuItem
                     onClick={logout}

@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { auth, User, RegisterResponse, PatientRegisterData, DoctorRegisterData } from '@/lib/api';
+import { auth, User, RegisterResponse, PatientRegisterData, DoctorRegisterData, DeliveryRegisterData } from '@/lib/api';
 
 interface AuthContextType {
   user: User | null;
@@ -10,6 +10,7 @@ interface AuthContextType {
   login: (email: string, password: string) => Promise<void>;
   registerPatient: (data: PatientRegisterData) => Promise<void>;
   registerDoctor: (data: DoctorRegisterData) => Promise<void>;
+  registerDelivery: (data: DeliveryRegisterData) => Promise<void>;
   logout: () => Promise<void>;
 }
 
@@ -17,6 +18,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 function getDashboardRoute(userType: string) {
   if (userType === 'Doctor') return '/dashboard/doctor';
+  if (userType === 'Delivery') return '/dashboard/delivery';
+  if (userType === 'Superuser') return '/dashboard/admin';
   return '/dashboard/patient';
 }
 
@@ -65,6 +68,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     handleRegisterSuccess(res, setUser, router);
   };
 
+  const registerDelivery = async (data: DeliveryRegisterData) => {
+    const res = await auth.registerDelivery(data);
+    handleRegisterSuccess(res, setUser, router);
+  };
+
   const logout = async () => {
     const accessToken = localStorage.getItem('access_token');
     const refreshToken = localStorage.getItem('refresh_token');
@@ -79,7 +87,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, registerPatient, registerDoctor, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, registerPatient, registerDoctor, registerDelivery, logout }}>
       {children}
     </AuthContext.Provider>
   );

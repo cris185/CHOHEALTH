@@ -13,9 +13,7 @@ import { Truck, Package, MapPin, Check } from 'lucide-react';
 
 const STAGE_COLORS: Record<string, string> = {
   picked_up: 'bg-slate-50 text-slate-700 border-slate-200',
-  left_origin: 'bg-blue-50 text-blue-700 border-blue-200',
   on_the_way: 'bg-indigo-50 text-indigo-700 border-indigo-200',
-  arriving_soon: 'bg-amber-50 text-amber-700 border-amber-200',
   delivered: 'bg-emerald-50 text-emerald-700 border-emerald-200',
 };
 
@@ -111,7 +109,7 @@ export default function PatientDeliveriesPage() {
                       </div>
                       <div className="flex flex-col items-end gap-1 shrink-0">
                         <Badge variant="outline" className={STAGE_COLORS[stageKey] || ''}>
-                          {tStage(stageKey as 'picked_up' | 'left_origin' | 'on_the_way' | 'arriving_soon' | 'delivered')}
+                          {tStage(stageKey as 'picked_up' | 'on_the_way' | 'delivered')}
                         </Badge>
                         <span className="text-xs font-semibold text-gray-900">${d.total}</span>
                       </div>

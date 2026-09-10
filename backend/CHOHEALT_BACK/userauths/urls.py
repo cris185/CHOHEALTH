@@ -2,10 +2,12 @@ from django.urls import path
 from rest_framework_simplejwt.views import TokenRefreshView
 from .views import PatientRegisterView, DoctorRegisterView, LoginView, LogoutView, MeView
 from .password_views import PasswordResetRequestView, PasswordResetConfirmView
+from delivery.views import DeliveryPersonRegisterView
 
 urlpatterns = [
     path('register/patient/', PatientRegisterView.as_view(), name='auth-register-patient'),
     path('register/doctor/', DoctorRegisterView.as_view(), name='auth-register-doctor'),
+    path('register/delivery/', DeliveryPersonRegisterView.as_view(), name='auth-register-delivery'),
     path('login/', LoginView.as_view(), name='auth-login'),
     path('logout/', LogoutView.as_view(), name='auth-logout'),
     path('token/refresh/', TokenRefreshView.as_view(), name='auth-token-refresh'),

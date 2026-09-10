@@ -87,6 +87,7 @@ export interface PatientRegisterData {
   date_of_birth: string;
   gender: string;
   blood_group?: string;
+  gps_tracking_consent: boolean;
 }
 
 export interface DoctorRegisterData {
@@ -104,6 +105,18 @@ export interface DoctorRegisterData {
   years_of_experience: number;
 }
 
+export interface DeliveryRegisterData {
+  email: string;
+  password: string;
+  password_confirm: string;
+  first_name: string;
+  second_name?: string;
+  first_last_name: string;
+  second_last_name?: string;
+  phone?: string;
+  gps_consent: boolean;
+}
+
 export const auth = {
   login: (email: string, password: string): Promise<LoginResponse> =>
     fetchAPI('/auth/login/', {
@@ -119,6 +132,12 @@ export const auth = {
 
   registerDoctor: (data: DoctorRegisterData): Promise<RegisterResponse> =>
     fetchAPI('/auth/register/doctor/', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
+  registerDelivery: (data: DeliveryRegisterData): Promise<RegisterResponse> =>
+    fetchAPI('/auth/register/delivery/', {
       method: 'POST',
       body: JSON.stringify(data),
     }),
@@ -706,6 +725,11 @@ export interface MedicineOrderCreatePayload {
   delivery_method: 'pickup' | 'delivery';
   branch_sid?: string;
   delivery_address?: string;
+  // Set by the address picker's map/search when the patient confirms a
+  // point — see delivery.geocoding on the backend for why this beats
+  // geocoding the free-text address after the fact.
+  delivery_lat?: number | null;
+  delivery_lng?: number | null;
   notes?: string;
 }
 
@@ -807,7 +831,7 @@ export interface DeliveryTrackingItem {
 
 export interface DeliveryTrackingResponse {
   order_sid: string;
-  stage: 'picked_up' | 'left_origin' | 'on_the_way' | 'arriving_soon' | 'delivered';
+  stage: 'picked_up' | 'on_the_way' | 'delivered';
   stage_index: number;
   total_stages: number;
   started_at: string | null;
@@ -816,6 +840,16 @@ export interface DeliveryTrackingResponse {
   address: string;
   shipping_fee: string;
   total: string;
+  // Only populated once stage is 'on_the_way' — the map has nothing to show
+  // before that.
+  courier_lat: number | null;
+  courier_lng: number | null;
+  courier_location_updated_at: string | null;
+  courier_location_stale: boolean;
+  // Geocoded once from `address` when the delivery was created — null if
+  // that lookup failed, in which case the map just skips the destination pin.
+  dest_lat: number | null;
+  dest_lng: number | null;
   items: DeliveryTrackingItem[];
 }
 
@@ -838,10 +872,11 @@ export const medicineDelivery = {
     prescriptionSid: string,
     address: string,
     token: string,
+    coords?: { lat: number | null; lng: number | null },
   ): Promise<PrescriptionDeliveryCreateResponse> =>
     fetchAPI(`/prescriptions/${prescriptionSid}/delivery/`, {
       method: 'POST',
-      body: JSON.stringify({ address }),
+      body: JSON.stringify({ address, latitude: coords?.lat ?? null, longitude: coords?.lng ?? null }),
       token,
     }),
 
@@ -850,6 +885,43 @@ export const medicineDelivery = {
 
   list: (token: string): Promise<DeliveryListItem[]> =>
     fetchAPI('/deliveries/', { token }),
+};
+
+// ---- Delivery person (courier) — read-only web surface. Accepting/
+// declining offers and moving a delivery's stage forward happen in the
+// Expo app, not here; this is profile, shift state, and history only. ----
+
+export interface DeliveryPersonProfile {
+  sid: string;
+  email: string;
+  full_name: string;
+  image: string;
+  first_name: string;
+  second_name: string;
+  first_last_name: string;
+  second_last_name: string;
+  phone: string;
+  on_duty_status: 'off_duty' | 'on_duty' | 'on_break';
+}
+
+export interface DeliveryHistoryItem {
+  sid: string;
+  order_sid: string;
+  stage: DeliveryTrackingResponse['stage'];
+  address: string;
+  created_at: string;
+  delivered_at: string | null;
+}
+
+export const deliveryPerson = {
+  profile: (token: string): Promise<DeliveryPersonProfile> =>
+    fetchAPI('/delivery/profile/', { token }),
+
+  updateProfile: (data: FormData, token: string): Promise<DeliveryPersonProfile> =>
+    fetchMultipart('/delivery/profile/', { method: 'PATCH', body: data, token }),
+
+  deliveries: (token: string): Promise<DeliveryHistoryItem[]> =>
+    fetchAPI('/delivery/deliveries/', { token }),
 };
 
 // ---- Prescribed lab booking (free appointment) ----
@@ -1347,4 +1419,41 @@ export const paymentMethods = {
 
   setDefault: (paymentMethodId: string, token: string) =>
     fetchAPI('/payment-methods/default/', { method: 'POST', body: JSON.stringify({ payment_method_id: paymentMethodId }), token }),
+};
+
+// ---- Admin (superuser web dashboard — read-only for now: users +
+// deliveries. Everything else Jazzmin can already do stays in Jazzmin. ----
+
+export interface AdminUser {
+  sid: string;
+  email: string;
+  user_type: 'Patient' | 'Doctor' | 'Delivery' | 'Superuser';
+  full_name: string;
+  phone: string;
+  date_joined: string;
+  is_active: boolean;
+  on_duty_status: 'off_duty' | 'on_duty' | 'on_break' | null;
+}
+
+export interface AdminDelivery {
+  sid: string;
+  order_sid: string;
+  patient_name: string;
+  patient_sid: string;
+  courier_name: string | null;
+  courier_sid: string | null;
+  origin_branch: string | null;
+  stage: 'picked_up' | 'on_the_way' | 'delivered';
+  address: string;
+  created_at: string;
+  delivered_at: string | null;
+}
+
+export const adminApi = {
+  users: (token: string): Promise<AdminUser[]> => fetchAPI('/admin/users/', { token }),
+
+  deliveries: (token: string): Promise<AdminDelivery[]> => fetchAPI('/admin/deliveries/', { token }),
+
+  userDeliveries: (userSid: string, token: string): Promise<{ user: AdminUser; deliveries: AdminDelivery[] }> =>
+    fetchAPI(`/admin/users/${userSid}/deliveries/`, { token }),
 };

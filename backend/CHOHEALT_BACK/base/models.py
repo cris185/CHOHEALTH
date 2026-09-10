@@ -21,6 +21,10 @@ class Branch(models.Model):
     phone = models.CharField(max_length=20, blank=True)
     email = models.EmailField(blank=True)
     is_active = models.BooleanField(default=True)
+    # Needed to rank couriers by proximity when assigning a delivery.
+    # Nullable — existing branches need these filled in by hand.
+    latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
 
     class Meta:
         verbose_name_plural = 'Branches'
@@ -654,6 +658,14 @@ class MedicineOrder(models.Model):
     delivery_method = models.CharField(max_length=20, choices=DELIVERY_METHOD_CHOICES, default='pickup')
     delivery_branch = models.ForeignKey(Branch, on_delete=models.SET_NULL, null=True, blank=True, related_name='medicine_orders')
     delivery_address = models.CharField(max_length=300, blank=True)
+    # Set directly by the frontend's map/search address picker (see
+    # AddressPicker.tsx) — the patient confirms an exact point instead of us
+    # geocoding free text after the fact, which is unreliable (see
+    # delivery.geocoding). Null for orders placed before the picker existed,
+    # or if a client bypasses it — payment_views falls back to geocoding
+    # `delivery_address` in that case.
+    delivery_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    delivery_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     status = models.CharField(max_length=20, choices=MEDICINE_ORDER_STATUS, default='Pending Payment')
     subtotal = models.DecimalField(max_digits=10, decimal_places=2, default=0)
     # Flat shipping fee. Non-zero only when a doctor's prescription is being
@@ -726,19 +738,17 @@ class MedicineOrderItem(models.Model):
 # Medicine Delivery (tracking record, 1:1 with MedicineOrder)
 # ============================================================================
 
+MAX_GEOFENCE_METERS = 150
+
+# Real courier-driven stages — set only by an explicit action from the
+# assigned courier (see delivery.views / base.delivery_views), never by
+# elapsed time. `picked_up` is the state a delivery starts in once paid and
+# (once assigned) is the courier's own to move forward.
 DELIVERY_STAGE_CHOICES = (
     ('picked_up', 'Picked up from origin'),
-    ('left_origin', 'Left the branch'),
     ('on_the_way', 'On the way'),
-    ('arriving_soon', 'Arriving soon'),
     ('delivered', 'Delivered'),
 )
-
-# Seconds between stage transitions. Kept small so the demo feels responsive:
-# a full delivery lifecycle takes ~2 minutes from payment to "Delivered".
-# The stages advance automatically inside the tracking polling endpoint based
-# on elapsed time — no cron or background worker needed.
-DELIVERY_STAGE_SECONDS = 30
 
 
 class MedicineDelivery(models.Model):
@@ -750,13 +760,29 @@ class MedicineDelivery(models.Model):
         Branch, on_delete=models.SET_NULL, null=True, related_name='deliveries',
     )
     address = models.CharField(max_length=300)
+    # Geocoded once from `address` when the delivery is created (best-effort,
+    # via delivery.geocoding — free OSM/Nominatim lookup, no API key). Null
+    # if geocoding failed; the map and geofence check both treat that as
+    # "no destination pin available" rather than erroring.
+    dest_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    dest_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     stage = models.CharField(max_length=20, choices=DELIVERY_STAGE_CHOICES, default='picked_up')
+    # The assigned courier. Null while pending assignment (no one on duty
+    # was close enough / everyone declined) — see delivery.assignment.
+    courier = models.ForeignKey(
+        'delivery.DeliveryPerson', on_delete=models.SET_NULL, null=True, blank=True, related_name='deliveries',
+    )
     # Set the first time the tracking endpoint is polled after payment (or
-    # at the moment of payment success, whichever comes first). We compute the
-    # active stage from `now() - started_at`.
+    # at the moment of payment success, whichever comes first).
     started_at = models.DateTimeField(null=True, blank=True)
     delivered_at = models.DateTimeField(null=True, blank=True)
     delivered_email_sent = models.BooleanField(default=False)
+    # Proof of delivery, captured when the courier taps "arrived": the
+    # package photo (stored on MinIO like every other FileField) plus the
+    # courier's GPS position at that exact moment.
+    proof_photo = models.FileField(upload_to='delivery_proof', blank=True)
+    proof_latitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
+    proof_longitude = models.DecimalField(max_digits=9, decimal_places=6, null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

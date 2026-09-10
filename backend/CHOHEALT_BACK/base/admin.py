@@ -4,6 +4,7 @@ from .models import (
     Medication, Prescription, PrescriptionItem,
     LabTest, LabOrder, LabOrderItem, LabResult,
     Review, MedicineOrder, MedicineOrderItem,
+    MedicineDelivery,
 )
 
 
@@ -107,3 +108,16 @@ class MedicineOrderAdmin(admin.ModelAdmin):
     list_filter = ('status', 'delivery_method')
     search_fields = ('patient__first_name', 'patient__first_last_name')
     inlines = [MedicineOrderItemInline]
+
+
+@admin.register(MedicineDelivery)
+class MedicineDeliveryAdmin(admin.ModelAdmin):
+    # `courier` and `stage` are list_editable so an admin can manually
+    # reassign a stuck delivery (no candidate on duty, everyone declined)
+    # or force a stage change without going through the courier app.
+    list_display = ('sid', 'order', 'origin_branch', 'stage', 'courier', 'address', 'created_at')
+    list_editable = ('stage', 'courier')
+    list_filter = ('stage', 'origin_branch')
+    search_fields = ('sid', 'order__sid', 'order__patient__first_name', 'order__patient__first_last_name', 'address')
+    raw_id_fields = ('order', 'courier')
+    readonly_fields = ('sid', 'created_at')

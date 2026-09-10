@@ -350,6 +350,10 @@ class MedicineOrderCreateSerializer(serializers.Serializer):
     delivery_method = serializers.ChoiceField(choices=['pickup', 'delivery'])
     branch_sid = serializers.CharField(required=False, default='', allow_blank=True)
     delivery_address = serializers.CharField(required=False, default='', allow_blank=True)
+    # Set by the frontend's map/search address picker when the patient
+    # confirms a point — see MedicineOrder.delivery_latitude/longitude.
+    delivery_lat = serializers.FloatField(required=False, allow_null=True, default=None)
+    delivery_lng = serializers.FloatField(required=False, allow_null=True, default=None)
     items = MedicineOrderItemCreateSerializer(many=True)
     notes = serializers.CharField(required=False, default='', allow_blank=True)
 

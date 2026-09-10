@@ -9,6 +9,7 @@ import {
   BranchItem,
   MedicineOrderCreateResponse,
 } from '@/lib/api';
+import AddressPicker, { AddressValue } from './AddressPicker';
 
 interface BuyMedicineModalProps {
   isOpen: boolean;
@@ -45,7 +46,7 @@ export default function BuyMedicineModal({
   const [quantity, setQuantity] = useState(1);
   const [method, setMethod] = useState<DeliveryMethod>('pickup');
   const [branchSid, setBranchSid] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState<AddressValue>({ address: '', lat: null, lng: null });
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -57,7 +58,7 @@ export default function BuyMedicineModal({
     setQuantity(1);
     setMethod('pickup');
     setBranchSid('');
-    setDeliveryAddress('');
+    setDeliveryAddress({ address: '', lat: null, lng: null });
     setError('');
     setBranchesLoading(true);
     branchesApi
@@ -92,7 +93,7 @@ export default function BuyMedicineModal({
       setError(t('branchRequired'));
       return;
     }
-    if (method === 'delivery' && !deliveryAddress.trim()) {
+    if (method === 'delivery' && (!deliveryAddress.address.trim() || deliveryAddress.lat == null)) {
       setError(t('addressRequired'));
       return;
     }
@@ -105,7 +106,9 @@ export default function BuyMedicineModal({
           items: [{ medication_sid: medication.sid, quantity }],
           delivery_method: method,
           branch_sid: method === 'pickup' ? branchSid : undefined,
-          delivery_address: method === 'delivery' ? deliveryAddress.trim() : undefined,
+          delivery_address: method === 'delivery' ? deliveryAddress.address.trim() : undefined,
+          delivery_lat: method === 'delivery' ? deliveryAddress.lat : undefined,
+          delivery_lng: method === 'delivery' ? deliveryAddress.lng : undefined,
         },
         token,
       );
@@ -232,14 +235,20 @@ export default function BuyMedicineModal({
                 <label className="block text-xs font-medium text-gray-700">
                   {t('deliveryAddress')}
                 </label>
-                <textarea
-                  value={deliveryAddress}
-                  onChange={(e) => setDeliveryAddress(e.target.value)}
-                  placeholder={t('deliveryAddressPlaceholder')}
-                  rows={2}
-                  disabled={submitting}
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-                />
+                <div className="mt-1">
+                  <AddressPicker
+                    value={deliveryAddress}
+                    onChange={setDeliveryAddress}
+                    placeholder={t('deliveryAddressPlaceholder')}
+                    disabled={submitting}
+                    labels={{
+                      searching: t('addressPickerSearching'),
+                      noResults: t('addressPickerNoResults'),
+                      pinPending: t('addressPickerPinPending'),
+                      pinConfirmed: t('addressPickerPinConfirmed'),
+                    }}
+                  />
+                </div>
               </div>
             </>
           )}

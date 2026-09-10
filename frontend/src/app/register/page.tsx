@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { Card, CardContent } from '@/components/ui/card';
-import { User, Stethoscope } from 'lucide-react';
+import { User, Stethoscope, Truck } from 'lucide-react';
 import Image from 'next/image';
 
 export default function RegisterPage() {
@@ -42,6 +42,20 @@ export default function RegisterPage() {
                 <div>
                   <h2 className="font-semibold">{t('register.doctor.title')}</h2>
                   <p className="text-sm text-muted-foreground">{t('register.doctor.subtitle')}</p>
+                </div>
+              </CardContent>
+            </Card>
+          </Link>
+
+          <Link href="/register/delivery">
+            <Card className="glass-panel cursor-pointer transition-all hover:shadow-md hover:border-primary/50 mt-3">
+              <CardContent className="flex items-center gap-4 p-5">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-amber-100">
+                  <Truck className="h-6 w-6 text-amber-600" />
+                </div>
+                <div>
+                  <h2 className="font-semibold">{t('register.delivery.title')}</h2>
+                  <p className="text-sm text-muted-foreground">{t('register.delivery.subtitle')}</p>
                 </div>
               </CardContent>
             </Card>

@@ -112,7 +112,8 @@
       "genderOther": "Other",
       "bloodGroup": "Blood Type",
       "bloodGroupSelect": "Select",
-      "minChars": "Min. 8 characters"
+      "minChars": "Min. 8 characters",
+      "gpsConsent": "Acepto los Términos y Condiciones, incluyendo compartir conmigo la ubicación en vivo del repartidor durante una entrega activa."
     },
     "doctor": {
       "title": "I'm a Doctor",
@@ -131,6 +132,15 @@
       "bio": "Biography",
       "bioPlaceholder": "Tell us about yourself and your experience...",
       "minChars": "Min. 8 characters"
+    },
+    "delivery": {
+      "title": "Soy Repartidor",
+      "subtitle": "Entrega pedidos de medicinas y gestiona tus turnos",
+      "formTitle": "Registro de Repartidor",
+      "submit": "Crear Cuenta de Repartidor",
+      "submitting": "Registrando...",
+      "minChars": "Mín. 8 caracteres",
+      "gpsConsent": "Acepto los Términos y Condiciones, incluyendo el uso del GPS de mi dispositivo para rastrear mis entregas — incluso en segundo plano mientras esté en turno."
     }
   },
   "services": {
@@ -303,7 +313,11 @@
         "pickupBranch": "Sede de recogida",
         "pickupBranchPlaceholder": "Selecciona una sede...",
         "deliveryAddress": "Direcci\u00f3n de entrega",
-        "deliveryAddressPlaceholder": "Calle, ciudad, referencias adicionales...",
+        "deliveryAddressPlaceholder": "Busca tu direcci\u00f3n o toca el mapa...",
+        "addressPickerSearching": "Buscando...",
+        "addressPickerNoResults": "Sin resultados \u2014 tambi\u00e9n puedes tocar el mapa para poner el pin.",
+        "addressPickerPinPending": "Busca arriba o toca/arrastra el pin en el mapa para fijar el punto exacto de entrega.",
+        "addressPickerPinConfirmed": "Pin definido \u2014 arr\u00e1stralo para ajustarlo.",
         "cancel": "Cancelar",
         "confirm": "Confirmar",
         "confirming": "Creando orden...",
@@ -361,11 +375,13 @@
         "totalPaid": "Total pagado",
         "fetchError": "No se pudo cargar el seguimiento.",
         "notFound": "No se encontr\u00f3 este env\u00edo.",
+        "courierLabel": "Tu repartidor",
+        "destinationLabel": "Direcci\u00f3n de entrega",
+        "locationLive": "Ubicaci\u00f3n en vivo",
+        "locationStale": "\u00daltima ubicaci\u00f3n conocida hace {minutes} min",
         "stage": {
           "picked_up": "Recogido",
-          "left_origin": "Sali\u00f3 del origen",
           "on_the_way": "En camino",
-          "arriving_soon": "Est\u00e1 por llegar",
           "delivered": "Entregado"
         }
       },
@@ -569,6 +585,95 @@
         "confirmCancelButton": "Cancelar",
         "deleted": "Notification deleted",
         "markedRead": "Marked as read"
+      }
+    },
+    "delivery": {
+      "nav": {
+        "dashboard": "Inicio",
+        "history": "Historial",
+        "profile": "Perfil"
+      },
+      "dutyStatus": {
+        "off_duty": "Fuera de turno",
+        "on_duty": "En turno",
+        "on_break": "En descanso"
+      },
+      "stage": {
+        "picked_up": "Recogido",
+        "on_the_way": "En camino",
+        "delivered": "Entregado"
+      },
+      "dashboardPage": {
+        "title": "Panel del Repartidor",
+        "today": "Hoy",
+        "completed": "Completadas",
+        "avgTime": "Tiempo prom. de entrega",
+        "recent": "Entregas recientes",
+        "empty": "Todavía no tienes entregas — acepta una oferta desde la app para empezar."
+      },
+      "historyPage": {
+        "title": "Historial de Entregas",
+        "empty": "Todavía no tienes entregas."
+      },
+      "profilePage": {
+        "title": "Editar Perfil",
+        "save": "Guardar Cambios",
+        "saving": "Guardando...",
+        "saveSuccess": "Perfil actualizado correctamente.",
+        "saveError": "No se pudo guardar tu perfil."
+      }
+    },
+    "admin": {
+      "nav": {
+        "users": "Usuarios",
+        "deliveries": "Entregas"
+      },
+      "roles": {
+        "Patient": "Paciente",
+        "Doctor": "Doctor",
+        "Delivery": "Repartidor",
+        "Superuser": "Admin"
+      },
+      "usersPage": {
+        "title": "Usuarios",
+        "subtitle": "{count} en total",
+        "searchPlaceholder": "Buscar por nombre o correo...",
+        "colName": "Nombre",
+        "colEmail": "Correo",
+        "colRole": "Rol",
+        "colPhone": "Teléfono",
+        "colJoined": "Registrado",
+        "colStatus": "Estado",
+        "active": "Activo",
+        "inactive": "Inactivo",
+        "onDuty": "En turno",
+        "onBreak": "En descanso",
+        "empty": "No se encontraron usuarios."
+      },
+      "deliveriesPage": {
+        "title": "Entregas",
+        "subtitle": "{count} en total",
+        "colPatient": "Paciente",
+        "colCourier": "Repartidor",
+        "colBranch": "Sucursal",
+        "colAddress": "Dirección",
+        "colStage": "Etapa",
+        "colCreated": "Creada",
+        "unassigned": "Sin asignar",
+        "empty": "Todavía no hay entregas."
+      },
+      "userDetailPage": {
+        "back": "Volver a usuarios",
+        "notFound": "Usuario no encontrado.",
+        "deliveryHistory": "Historial de entregas ({count})",
+        "noDeliveries": "Este usuario no tiene entregas.",
+        "colOrder": "Pedido",
+        "colCounterpart": "Contraparte",
+        "colAddress": "Dirección",
+        "colStage": "Etapa",
+        "colCreated": "Creada",
+        "colDelivered": "Entregada",
+        "unassigned": "Sin asignar"
       }
     },
     "info": {

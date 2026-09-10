@@ -1,6 +1,7 @@
 from rest_framework import serializers
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from django.db import transaction
+from django.utils import timezone
 from .models import User
 from patient.models import Patient
 from doctor.models import Doctor
@@ -43,6 +44,14 @@ class PatientRegisterSerializer(_BaseRegisterSerializer):
     date_of_birth = serializers.DateField()
     gender = serializers.ChoiceField(choices=GENDER_CHOICES)
     blood_group = serializers.ChoiceField(choices=BLOOD_GROUP_CHOICES, required=False, default='')
+    # Consent to see a courier's live location on a delivery in progress —
+    # accepted as part of the platform's T&C at signup, not a separate screen.
+    gps_tracking_consent = serializers.BooleanField()
+
+    def validate_gps_tracking_consent(self, value):
+        if not value:
+            raise serializers.ValidationError('Debes aceptar los términos y condiciones para registrarte.')
+        return value
 
     @transaction.atomic
     def create(self, validated_data):
@@ -62,6 +71,7 @@ class PatientRegisterSerializer(_BaseRegisterSerializer):
             date_of_birth=validated_data['date_of_birth'],
             gender=validated_data['gender'],
             blood_group=validated_data.get('blood_group', ''),
+            gps_tracking_consent_accepted_at=timezone.now(),
         )
         return user
 

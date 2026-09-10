@@ -8,8 +8,10 @@ Two entry points create a MedicineOrder destined for delivery:
      because the medicine price already covers it.
 
 The actual tracking state lives in `MedicineDelivery`, a 1:1 sibling of
-`MedicineOrder` created once the order is paid. Stage advancement is computed
-from elapsed time on read (see `_compute_current_stage`) — no cron needed.
+`MedicineOrder` created once the order is paid (see
+`billing/payment_views.py`, which also makes the first assignment attempt).
+`stage` only ever changes via an explicit courier action — `start-transit`
+and `arrived` below — never from elapsed time.
 """
 from decimal import Decimal
 
@@ -17,42 +19,34 @@ from django.db import transaction
 from django.utils import timezone
 
 from rest_framework import status
+from rest_framework.parsers import MultiPartParser
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from delivery.assignment import haversine_km, retry_pending_assignments
+from delivery.permissions import IsDeliveryPerson
 from patient.permissions import IsPatient
 
 from .models import (
     Branch, MedicineDelivery, MedicineOrder, MedicineOrderItem,
-    Prescription, DELIVERY_STAGE_CHOICES, DELIVERY_STAGE_SECONDS,
+    Prescription, DELIVERY_STAGE_CHOICES, MAX_GEOFENCE_METERS,
 )
 
 # Flat shipping fee charged when shipping a doctor's prescription. Direct
 # cart purchases ship free — the medicine price already includes it.
 PRESCRIPTION_SHIPPING_FEE = Decimal('10.00')
 
-# Ordered list of stage keys — used to compute the active stage by index and
-# to figure out when we've reached "delivered".
+# Ordered list of stage keys — used to report a stage index/total to the
+# frontend's stepper UI.
 STAGE_ORDER = [code for code, _ in DELIVERY_STAGE_CHOICES]
+
+PROOF_MAX_BYTES = 10 * 1024 * 1024  # 10 MB
+PROOF_ALLOWED_TYPES = {'image/jpeg', 'image/png', 'image/webp'}
 
 
 def _auto_assign_origin_branch():
     """Return the first active branch — used as the courier pickup point."""
     return Branch.objects.filter(is_active=True).order_by('pk').first()
-
-
-def _compute_current_stage(delivery: MedicineDelivery) -> str:
-    """How many stage-ticks have elapsed since the order was paid.
-
-    Deterministic function of `started_at` so the polling endpoint doesn't
-    need to persist anything to move the tracker forward — only when we
-    transition INTO `delivered` do we write back (to trigger the email).
-    """
-    if not delivery.started_at:
-        return STAGE_ORDER[0]
-    elapsed = (timezone.now() - delivery.started_at).total_seconds()
-    idx = min(int(elapsed // DELIVERY_STAGE_SECONDS), len(STAGE_ORDER) - 1)
-    return STAGE_ORDER[idx]
 
 
 class PrescriptionDeliveryCreateView(APIView):
@@ -69,6 +63,13 @@ class PrescriptionDeliveryCreateView(APIView):
         address = (request.data.get('address') or '').strip()
         if not address:
             return Response({'detail': 'address is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        # Set by the frontend's map/search address picker when the patient
+        # confirms a point — see MedicineOrder.delivery_latitude/longitude.
+        try:
+            lat = float(request.data['latitude']) if request.data.get('latitude') not in (None, '') else None
+            lng = float(request.data['longitude']) if request.data.get('longitude') not in (None, '') else None
+        except (KeyError, ValueError, TypeError):
+            lat = lng = None
 
         try:
             prescription = (
@@ -104,6 +105,8 @@ class PrescriptionDeliveryCreateView(APIView):
             delivery_method='delivery',
             delivery_branch=origin,
             delivery_address=address,
+            delivery_latitude=lat,
+            delivery_longitude=lng,
             source_prescription=prescription,
             status='Pending Payment',
             shipping_fee=PRESCRIPTION_SHIPPING_FEE,
@@ -147,8 +150,7 @@ class PrescriptionDeliveryCreateView(APIView):
 class PatientDeliveryListView(APIView):
     """List every delivery-mode medicine order belonging to this patient.
 
-    Returns the current (possibly auto-advanced) stage so the list page can
-    show an inline progress badge without hitting the per-order tracker.
+    Returns the courier-driven stage as stored — no more on-read simulation.
     """
     permission_classes = [IsPatient]
 
@@ -163,7 +165,7 @@ class PatientDeliveryListView(APIView):
         payload = []
         for order in orders:
             delivery = getattr(order, 'delivery', None)
-            stage = _compute_current_stage(delivery) if delivery else None
+            stage = delivery.stage if delivery else None
             payload.append({
                 'order_sid': order.sid,
                 'created_at': order.created_at.isoformat(),
@@ -180,10 +182,15 @@ class PatientDeliveryListView(APIView):
         return Response(payload)
 
 
+# Consider a courier's last GPS ping "stale" past this age — the frontend
+# shows "last known location N min ago" instead of trusting a frozen pin.
+LOCATION_STALE_SECONDS = 60
+
+
 class MedicineDeliveryTrackingView(APIView):
-    """Polling endpoint. Returns the active delivery stage, advancing it if
-    the elapsed time crossed a stage boundary, and fires the delivered email
-    the first time we hit the final stage.
+    """Polling endpoint. Stage only moves via the courier's own actions
+    (start-transit / arrived, below) — this view just reports current state,
+    plus the courier's live position once they're on the way.
     """
     permission_classes = [IsPatient]
 
@@ -191,7 +198,7 @@ class MedicineDeliveryTrackingView(APIView):
         try:
             order = (
                 MedicineOrder.objects
-                .select_related('delivery', 'delivery_branch', 'patient')
+                .select_related('delivery', 'delivery__courier', 'delivery_branch', 'patient')
                 .prefetch_related('items__medication')
                 .get(sid=sid, patient=request.user.patient)
             )
@@ -206,29 +213,17 @@ class MedicineDeliveryTrackingView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        new_stage = _compute_current_stage(delivery)
-
-        # Transition bookkeeping. Only write to the DB when the computed stage
-        # overtakes the stored one — otherwise every poll would be a write.
-        if new_stage != delivery.stage:
-            delivery.stage = new_stage
-            if new_stage == 'delivered' and not delivery.delivered_at:
-                delivery.delivered_at = timezone.now()
-            delivery.save(update_fields=['stage', 'delivered_at'])
-
-        # First-time-delivered: fire the email.
-        if (
-            delivery.stage == 'delivered'
-            and not delivery.delivered_email_sent
-        ):
-            try:
-                from userauths.services.email_service import send_medicine_delivery_completed_email
-                send_medicine_delivery_completed_email(order)
-            except Exception:
-                pass
-            finally:
-                delivery.delivered_email_sent = True
-                delivery.save(update_fields=['delivered_email_sent'])
+        courier_lat = courier_lng = courier_location_updated_at = None
+        courier_location_stale = False
+        # Only surface the courier's position once they're actually moving —
+        # before that there's nothing useful to show on a map yet.
+        if delivery.stage == 'on_the_way' and delivery.courier:
+            courier_lat = delivery.courier.current_latitude
+            courier_lng = delivery.courier.current_longitude
+            courier_location_updated_at = delivery.courier.location_updated_at
+            if courier_location_updated_at:
+                age = (timezone.now() - courier_location_updated_at).total_seconds()
+                courier_location_stale = age > LOCATION_STALE_SECONDS
 
         return Response({
             'order_sid': order.sid,
@@ -241,6 +236,12 @@ class MedicineDeliveryTrackingView(APIView):
             'address': delivery.address,
             'shipping_fee': str(order.shipping_fee),
             'total': str(order.total),
+            'courier_lat': courier_lat,
+            'courier_lng': courier_lng,
+            'courier_location_updated_at': courier_location_updated_at.isoformat() if courier_location_updated_at else None,
+            'courier_location_stale': courier_location_stale,
+            'dest_lat': delivery.dest_latitude,
+            'dest_lng': delivery.dest_longitude,
             'items': [
                 {
                     'sid': item.sid,
@@ -254,3 +255,85 @@ class MedicineDeliveryTrackingView(APIView):
                 for item in order.items.all()
             ],
         })
+
+
+class DeliveryStartTransitView(APIView):
+    """The assigned courier taps "On my way" — picked_up -> on_the_way. This
+    is also the moment the patient's tracker starts showing a live map."""
+    permission_classes = [IsDeliveryPerson]
+
+    def post(self, request, sid):
+        try:
+            delivery = MedicineDelivery.objects.get(sid=sid, courier=request.user.delivery_person)
+        except MedicineDelivery.DoesNotExist:
+            return Response({'detail': 'Delivery not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if delivery.stage != 'picked_up':
+            return Response({'detail': f'Cannot start transit from stage "{delivery.stage}".'}, status=status.HTTP_400_BAD_REQUEST)
+        delivery.stage = 'on_the_way'
+        delivery.save(update_fields=['stage'])
+        return Response({'stage': delivery.stage})
+
+
+class DeliveryArrivedView(APIView):
+    """The assigned courier taps "Arrived" — on_the_way -> delivered.
+    Requires a proof photo; the courier's current GPS position is checked
+    against the delivery address (soft geofence — logged, not a hard block,
+    since a bad GPS fix shouldn't strand a courier who's genuinely there) and
+    saved as delivery proof alongside the photo.
+    """
+    permission_classes = [IsDeliveryPerson]
+    parser_classes = [MultiPartParser]
+
+    @transaction.atomic
+    def post(self, request, sid):
+        try:
+            delivery = MedicineDelivery.objects.select_related('order').get(
+                sid=sid, courier=request.user.delivery_person,
+            )
+        except MedicineDelivery.DoesNotExist:
+            return Response({'detail': 'Delivery not found.'}, status=status.HTTP_404_NOT_FOUND)
+        if delivery.stage != 'on_the_way':
+            return Response({'detail': f'Cannot mark arrived from stage "{delivery.stage}".'}, status=status.HTTP_400_BAD_REQUEST)
+
+        photo = request.FILES.get('photo')
+        if not photo:
+            return Response({'detail': 'A delivery photo is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        if photo.content_type not in PROOF_ALLOWED_TYPES:
+            return Response({'detail': 'Unsupported file type. Allowed: JPEG, PNG, WebP.'}, status=status.HTTP_400_BAD_REQUEST)
+        if photo.size > PROOF_MAX_BYTES:
+            return Response({'detail': 'File is too large (max 10 MB).'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            lat = float(request.data['latitude'])
+            lng = float(request.data['longitude'])
+        except (KeyError, ValueError):
+            return Response({'detail': 'latitude and longitude are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        within_geofence = None
+        if delivery.dest_latitude is not None and delivery.dest_longitude is not None:
+            distance_m = haversine_km(lat, lng, delivery.dest_latitude, delivery.dest_longitude) * 1000
+            within_geofence = distance_m <= MAX_GEOFENCE_METERS
+
+        delivery.stage = 'delivered'
+        delivery.delivered_at = timezone.now()
+        delivery.proof_photo = photo
+        delivery.proof_latitude = lat
+        delivery.proof_longitude = lng
+        delivery.save(update_fields=['stage', 'delivered_at', 'proof_photo', 'proof_latitude', 'proof_longitude'])
+
+        order = delivery.order
+        if not delivery.delivered_email_sent:
+            try:
+                from userauths.services.email_service import send_medicine_delivery_completed_email
+                send_medicine_delivery_completed_email(order)
+            except Exception:
+                pass
+            finally:
+                delivery.delivered_email_sent = True
+                delivery.save(update_fields=['delivered_email_sent'])
+
+        # This courier just freed up — see if anything in the pending queue
+        # can be placed now.
+        transaction.on_commit(retry_pending_assignments)
+
+        return Response({'stage': delivery.stage, 'within_geofence': within_geofence})

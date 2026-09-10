@@ -22,7 +22,7 @@ from .appointment_actions import (
 )
 from .delivery_views import (
     PrescriptionDeliveryCreateView, MedicineDeliveryTrackingView,
-    PatientDeliveryListView,
+    PatientDeliveryListView, DeliveryStartTransitView, DeliveryArrivedView,
 )
 from .review_views import (
     DoctorReviewsListView, MyReviewsListView, AllReviewsListView,
@@ -74,6 +74,8 @@ urlpatterns = [
     path('prescriptions/<str:sid>/delivery/', PrescriptionDeliveryCreateView.as_view(), name='prescription-delivery-create'),
     path('medicine-orders/<str:sid>/tracking/', MedicineDeliveryTrackingView.as_view(), name='medicine-order-tracking'),
     path('deliveries/', PatientDeliveryListView.as_view(), name='patient-delivery-list'),
+    path('deliveries/<str:sid>/start-transit/', DeliveryStartTransitView.as_view(), name='delivery-start-transit'),
+    path('deliveries/<str:sid>/arrived/', DeliveryArrivedView.as_view(), name='delivery-arrived'),
 
     # Reviews (doctor ratings)
     path('reviews/', ReviewCreateOrUpdateView.as_view(), name='review-create'),

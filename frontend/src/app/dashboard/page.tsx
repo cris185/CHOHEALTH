@@ -16,8 +16,10 @@ export default function DashboardRedirect() {
       router.push('/login');
     } else if (user.user_type === 'Doctor') {
       router.push('/dashboard/doctor');
+    } else if (user.user_type === 'Delivery') {
+      router.push('/dashboard/delivery');
     } else if (user.user_type === 'Superuser') {
-      window.location.href = '/admin/';
+      router.push('/dashboard/admin');
     } else {
       router.push('/dashboard/patient');
     }

@@ -886,6 +886,8 @@ class MedicineOrderCreateView(APIView):
             delivery_method=data['delivery_method'],
             delivery_branch=branch,
             delivery_address=data.get('delivery_address', ''),
+            delivery_latitude=data.get('delivery_lat'),
+            delivery_longitude=data.get('delivery_lng'),
             notes=data.get('notes', ''),
             status='Pending Payment',
         )

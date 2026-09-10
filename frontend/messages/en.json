@@ -112,7 +112,8 @@
       "genderOther": "Other",
       "bloodGroup": "Blood Type",
       "bloodGroupSelect": "Select",
-      "minChars": "Min. 8 characters"
+      "minChars": "Min. 8 characters",
+      "gpsConsent": "I agree to the Terms & Conditions, including sharing my courier's live location with me during an active delivery."
     },
     "doctor": {
       "title": "I'm a Doctor",
@@ -131,6 +132,15 @@
       "bio": "Biography",
       "bioPlaceholder": "Tell us about yourself and your experience...",
       "minChars": "Min. 8 characters"
+    },
+    "delivery": {
+      "title": "I'm a Courier",
+      "subtitle": "Deliver medicine orders and manage your shifts",
+      "formTitle": "Courier Registration",
+      "submit": "Create Courier Account",
+      "submitting": "Registering...",
+      "minChars": "Min. 8 characters",
+      "gpsConsent": "I agree to the Terms & Conditions, including using my device's GPS location to track my deliveries — including in the background while I'm on duty."
     }
   },
   "services": {
@@ -303,7 +313,11 @@
         "pickupBranch": "Pickup branch",
         "pickupBranchPlaceholder": "Select a branch...",
         "deliveryAddress": "Delivery address",
-        "deliveryAddressPlaceholder": "Street, city, additional references...",
+        "deliveryAddressPlaceholder": "Search your address or tap the map...",
+        "addressPickerSearching": "Searching...",
+        "addressPickerNoResults": "No matches — you can also tap the map to place the pin.",
+        "addressPickerPinPending": "Search above or tap/drag the pin on the map to set the exact delivery point.",
+        "addressPickerPinConfirmed": "Pin set — drag it to fine-tune.",
         "cancel": "Cancel",
         "confirm": "Confirm",
         "confirming": "Placing order...",
@@ -361,11 +375,13 @@
         "totalPaid": "Total paid",
         "fetchError": "Could not load the tracking info.",
         "notFound": "This delivery could not be found.",
+        "courierLabel": "Your courier",
+        "destinationLabel": "Delivery address",
+        "locationLive": "Live location",
+        "locationStale": "Last known location {minutes} min ago",
         "stage": {
           "picked_up": "Picked up",
-          "left_origin": "Left origin",
           "on_the_way": "On the way",
-          "arriving_soon": "Arriving soon",
           "delivered": "Delivered"
         }
       },
@@ -569,6 +585,95 @@
         "confirmCancelButton": "Cancel",
         "deleted": "Notification deleted",
         "markedRead": "Marked as read"
+      }
+    },
+    "delivery": {
+      "nav": {
+        "dashboard": "Dashboard",
+        "history": "History",
+        "profile": "Profile"
+      },
+      "dutyStatus": {
+        "off_duty": "Off duty",
+        "on_duty": "On duty",
+        "on_break": "On break"
+      },
+      "stage": {
+        "picked_up": "Picked up",
+        "on_the_way": "On the way",
+        "delivered": "Delivered"
+      },
+      "dashboardPage": {
+        "title": "Courier Dashboard",
+        "today": "Today",
+        "completed": "Completed",
+        "avgTime": "Avg. delivery time",
+        "recent": "Recent deliveries",
+        "empty": "No deliveries yet — accept an offer from the app to get started."
+      },
+      "historyPage": {
+        "title": "Delivery History",
+        "empty": "No deliveries yet."
+      },
+      "profilePage": {
+        "title": "Edit Profile",
+        "save": "Save Changes",
+        "saving": "Saving...",
+        "saveSuccess": "Profile updated successfully.",
+        "saveError": "Could not save your profile."
+      }
+    },
+    "admin": {
+      "nav": {
+        "users": "Users",
+        "deliveries": "Deliveries"
+      },
+      "roles": {
+        "Patient": "Patient",
+        "Doctor": "Doctor",
+        "Delivery": "Courier",
+        "Superuser": "Admin"
+      },
+      "usersPage": {
+        "title": "Users",
+        "subtitle": "{count} total",
+        "searchPlaceholder": "Search by name or email...",
+        "colName": "Name",
+        "colEmail": "Email",
+        "colRole": "Role",
+        "colPhone": "Phone",
+        "colJoined": "Joined",
+        "colStatus": "Status",
+        "active": "Active",
+        "inactive": "Inactive",
+        "onDuty": "On duty",
+        "onBreak": "On break",
+        "empty": "No users found."
+      },
+      "deliveriesPage": {
+        "title": "Deliveries",
+        "subtitle": "{count} total",
+        "colPatient": "Patient",
+        "colCourier": "Courier",
+        "colBranch": "Branch",
+        "colAddress": "Address",
+        "colStage": "Stage",
+        "colCreated": "Created",
+        "unassigned": "Unassigned",
+        "empty": "No deliveries yet."
+      },
+      "userDetailPage": {
+        "back": "Back to users",
+        "notFound": "User not found.",
+        "deliveryHistory": "Delivery history ({count})",
+        "noDeliveries": "No deliveries for this user.",
+        "colOrder": "Order",
+        "colCounterpart": "Counterpart",
+        "colAddress": "Address",
+        "colStage": "Stage",
+        "colCreated": "Created",
+        "colDelivered": "Delivered",
+        "unassigned": "Unassigned"
       }
     },
     "info": {

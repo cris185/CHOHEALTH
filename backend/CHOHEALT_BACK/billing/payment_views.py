@@ -18,6 +18,8 @@ from base.models import (
     open_message_thread_for_appointment,
 )
 from base.pickup_code import generate_unique_pickup_code, generate_qr_png_bytes
+from delivery.assignment import try_assign
+from delivery.geocoding import geocode_address
 from doctor.models import Doctor, Notification
 from .stripe_customer import get_or_create_stripe_customer
 from .models import Invoice, InvoiceLineItem, Payment
@@ -468,13 +470,28 @@ def _process_medicine_order_payment_success(order, payment_method, gateway_charg
     # patient watches the stage progress on the tracking page.
     update_fields = ['status']
     if is_delivery:
-        MedicineDelivery.objects.create(
+        # The patient's address picker (frontend) sets these directly when
+        # they confirm a point on the map — far more reliable than
+        # geocoding the free-text address after the fact. Only fall back to
+        # that for orders that somehow skipped the picker.
+        if order.delivery_latitude is not None and order.delivery_longitude is not None:
+            dest_lat, dest_lng = order.delivery_latitude, order.delivery_longitude
+        else:
+            dest_coords = geocode_address(order.delivery_address)
+            dest_lat, dest_lng = dest_coords if dest_coords else (None, None)
+        delivery = MedicineDelivery.objects.create(
             order=order,
             origin_branch=order.delivery_branch,
             address=order.delivery_address,
+            dest_latitude=dest_lat,
+            dest_longitude=dest_lng,
             stage='picked_up',
             started_at=timezone.now(),
         )
+        # Try to place it with the closest available courier right away;
+        # if no one's free it just queues (courier stays null) and gets
+        # retried the next time any courier frees up or declines an offer.
+        transaction.on_commit(lambda: try_assign(delivery))
         order.status = 'Dispatched'
     else:
         if not order.pickup_code:

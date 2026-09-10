@@ -3,28 +3,33 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
+import dynamic from 'next/dynamic';
 import { useAuth } from '@/context/AuthContext';
 import { medicineDelivery, DeliveryTrackingResponse } from '@/lib/api';
 import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Truck, Warehouse, PackageCheck, MapPin, Home, Check } from 'lucide-react';
+import { Truck, Warehouse, Home, Check, MapPin } from 'lucide-react';
+
+const DeliveryMap = dynamic(() => import('@/components/delivery/DeliveryMap'), { ssr: false });
 
 const POLL_INTERVAL_MS = 3000;
 
 type Stage = DeliveryTrackingResponse['stage'];
 
 /**
- * Five stages the tracker advances through. Order MUST match the backend's
+ * Three real, courier-driven stages. Order MUST match the backend's
  * `STAGE_ORDER`. We repaint the progress bar based on `stage_index` returned
  * by the polling endpoint — no client-side timers.
  */
 const STAGES: Array<{ key: Stage; icon: typeof Truck }> = [
   { key: 'picked_up', icon: Warehouse },
-  { key: 'left_origin', icon: PackageCheck },
   { key: 'on_the_way', icon: Truck },
-  { key: 'arriving_soon', icon: MapPin },
   { key: 'delivered', icon: Home },
 ];
+
+function minutesAgo(iso: string): number {
+  return Math.max(1, Math.round((Date.now() - new Date(iso).getTime()) / 60000));
+}
 
 export default function DeliveryTrackingPage() {
   const { orderSid } = useParams<{ orderSid: string }>();
@@ -159,6 +164,29 @@ export default function DeliveryTrackingPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Live map — only once the courier is actually moving; before that
+          there's no position worth showing. */}
+      {data.stage === 'on_the_way' && data.courier_lat !== null && data.courier_lng !== null && (
+        <Card className="glass-panel mb-6 overflow-hidden">
+          <CardContent className="p-0">
+            <DeliveryMap
+              lat={data.courier_lat}
+              lng={data.courier_lng}
+              label={t('courierLabel')}
+              destLat={data.dest_lat}
+              destLng={data.dest_lng}
+              destLabel={t('destinationLabel')}
+            />
+            <div className="flex items-center gap-1.5 px-5 py-3 text-xs text-muted-foreground">
+              <MapPin className="h-3.5 w-3.5 shrink-0" />
+              {data.courier_location_stale
+                ? t('locationStale', { minutes: data.courier_location_updated_at ? minutesAgo(data.courier_location_updated_at) : '—' })
+                : t('locationLive')}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Address block */}
       <Card className="glass-panel mb-6">

@@ -9,6 +9,7 @@ import {
   BranchItem,
   MedicineOrderCreateResponse,
 } from '@/lib/api';
+import AddressPicker, { AddressValue } from './AddressPicker';
 
 interface CartCheckoutModalProps {
   isOpen: boolean;
@@ -37,7 +38,7 @@ export default function CartCheckoutModal({
 
   const [method, setMethod] = useState<DeliveryMethod>('pickup');
   const [branchSid, setBranchSid] = useState('');
-  const [deliveryAddress, setDeliveryAddress] = useState('');
+  const [deliveryAddress, setDeliveryAddress] = useState<AddressValue>({ address: '', lat: null, lng: null });
   const [branches, setBranches] = useState<BranchItem[]>([]);
   const [branchesLoading, setBranchesLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -47,7 +48,7 @@ export default function CartCheckoutModal({
     if (!isOpen) return;
     setMethod('pickup');
     setBranchSid('');
-    setDeliveryAddress('');
+    setDeliveryAddress({ address: '', lat: null, lng: null });
     setError('');
     setBranchesLoading(true);
     branchesApi.list()
@@ -70,7 +71,10 @@ export default function CartCheckoutModal({
     if (count === 0) return;
     setError('');
     if (method === 'pickup' && !branchSid) { setError(t('branchRequired')); return; }
-    if (method === 'delivery' && !deliveryAddress.trim()) { setError(t('addressRequired')); return; }
+    if (method === 'delivery' && (!deliveryAddress.address.trim() || deliveryAddress.lat == null)) {
+      setError(t('addressRequired'));
+      return;
+    }
 
     setSubmitting(true);
     try {
@@ -80,7 +84,9 @@ export default function CartCheckoutModal({
           items: items.map((it) => ({ medication_sid: it.medication.sid, quantity: it.quantity })),
           delivery_method: method,
           branch_sid: method === 'pickup' ? branchSid : undefined,
-          delivery_address: method === 'delivery' ? deliveryAddress.trim() : undefined,
+          delivery_address: method === 'delivery' ? deliveryAddress.address.trim() : undefined,
+          delivery_lat: method === 'delivery' ? deliveryAddress.lat : undefined,
+          delivery_lng: method === 'delivery' ? deliveryAddress.lng : undefined,
         },
         token,
       );
@@ -173,8 +179,20 @@ export default function CartCheckoutModal({
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-700">{t('deliveryAddress')}</label>
-                <textarea value={deliveryAddress} onChange={(e) => setDeliveryAddress(e.target.value)} placeholder={t('deliveryAddressPlaceholder')} rows={2} disabled={submitting}
-                  className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50" />
+                <div className="mt-1">
+                  <AddressPicker
+                    value={deliveryAddress}
+                    onChange={setDeliveryAddress}
+                    placeholder={t('deliveryAddressPlaceholder')}
+                    disabled={submitting}
+                    labels={{
+                      searching: t('addressPickerSearching'),
+                      noResults: t('addressPickerNoResults'),
+                      pinPending: t('addressPickerPinPending'),
+                      pinConfirmed: t('addressPickerPinConfirmed'),
+                    }}
+                  />
+                </div>
               </div>
             </>
           )}

@@ -131,6 +131,7 @@ NOTIFICATION_TYPE = (
     ('Medication Delivered', 'Medication Delivered'),
     ('Rate Doctor', 'Rate Doctor'),
     ('New Message', 'New Message'),
+    ('New Delivery Offer', 'New Delivery Offer'),
 )
 
 
@@ -142,6 +143,9 @@ class Notification(models.Model):
     message = models.TextField()
     is_read = models.BooleanField(default=False)
     appointment = models.ForeignKey('base.Appointment', on_delete=models.SET_NULL, null=True, blank=True, related_name='notifications')
+    # So a delivery-offer push notification can deep-link straight to the
+    # relevant delivery instead of just a generic notifications list.
+    delivery = models.ForeignKey('base.MedicineDelivery', on_delete=models.SET_NULL, null=True, blank=True, related_name='notifications')
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { medicineDelivery, PrescriptionDeliveryCreateResponse } from '@/lib/api';
 import { Truck } from 'lucide-react';
+import AddressPicker, { AddressValue } from './AddressPicker';
 
 interface RequestDeliveryModalProps {
   isOpen: boolean;
@@ -23,13 +24,13 @@ export default function RequestDeliveryModal({
   isOpen, onClose, prescriptionSid, onCreated,
 }: RequestDeliveryModalProps) {
   const t = useTranslations('dashboard.patient.medicinePage');
-  const [address, setAddress] = useState('');
+  const [address, setAddress] = useState<AddressValue>({ address: '', lat: null, lng: null });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!isOpen) {
-      setAddress('');
+      setAddress({ address: '', lat: null, lng: null });
       setError('');
       setSubmitting(false);
     }
@@ -38,13 +39,13 @@ export default function RequestDeliveryModal({
   if (!isOpen || !prescriptionSid) return null;
 
   const handleSubmit = async () => {
-    if (!address.trim()) { setError(t('addressRequired')); return; }
+    if (!address.address.trim() || address.lat == null) { setError(t('addressRequired')); return; }
     setSubmitting(true);
     setError('');
     try {
       const token = localStorage.getItem('access_token') || '';
       const response = await medicineDelivery.createFromPrescription(
-        prescriptionSid, address.trim(), token,
+        prescriptionSid, address.address.trim(), token, { lat: address.lat, lng: address.lng },
       );
       onCreated(response);
       onClose();
@@ -80,14 +81,20 @@ export default function RequestDeliveryModal({
 
           <div>
             <label className="block text-xs font-medium text-gray-700">{t('deliveryAddress')}</label>
-            <textarea
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              placeholder={t('deliveryAddressPlaceholder')}
-              rows={3}
-              disabled={submitting}
-              className="mt-1 w-full rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-            />
+            <div className="mt-1">
+              <AddressPicker
+                value={address}
+                onChange={setAddress}
+                placeholder={t('deliveryAddressPlaceholder')}
+                disabled={submitting}
+                labels={{
+                  searching: t('addressPickerSearching'),
+                  noResults: t('addressPickerNoResults'),
+                  pinPending: t('addressPickerPinPending'),
+                  pinConfirmed: t('addressPickerPinConfirmed'),
+                }}
+              />
+            </div>
           </div>
 
           <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-3">
@@ -111,7 +118,7 @@ export default function RequestDeliveryModal({
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
             {t('cancel')}
           </button>
-          <button type="button" onClick={handleSubmit} disabled={submitting || !address.trim()}
+          <button type="button" onClick={handleSubmit} disabled={submitting || !address.address.trim() || address.lat == null}
             className="rounded-md bg-primary px-4 py-2 text-sm font-semibold text-primary-foreground hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50">
             {submitting ? t('confirming') : t('continueToPayment')}
           </button>

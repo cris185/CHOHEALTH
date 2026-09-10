@@ -46,6 +46,10 @@ class Patient(models.Model):
     # (e.g. opening a secure message thread), not at registration time.
     medplum_patient_id = models.CharField(max_length=64, blank=True, db_index=True)
 
+    # Set at registration when the T&C checkbox (which covers seeing a
+    # courier's live location during a delivery) is accepted.
+    gps_tracking_consent_accepted_at = models.DateTimeField(null=True, blank=True)
+
     @property
     def full_name(self):
         parts = [self.first_name, self.second_name, self.first_last_name, self.second_last_name]

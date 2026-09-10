@@ -22,6 +22,7 @@ export default function PatientRegisterPage() {
     email: '', password: '', password_confirm: '',
     first_name: '', second_name: '', first_last_name: '', second_last_name: '',
     phone: '', address: '', date_of_birth: '', gender: '', blood_group: '',
+    gps_tracking_consent: false,
   });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -141,6 +142,17 @@ export default function PatientRegisterPage() {
                   <PasswordInput id="password_confirm" name="password_confirm" required minLength={8} value={form.password_confirm} onChange={handleChange} placeholder="********" />
                 </div>
               </div>
+
+              <label className="flex items-start gap-2 cursor-pointer px-1">
+                <input
+                  type="checkbox"
+                  required
+                  checked={form.gps_tracking_consent}
+                  onChange={(e) => setForm({ ...form, gps_tracking_consent: e.target.checked })}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                />
+                <span className="text-xs text-muted-foreground">{t('register.patient.gpsConsent')}</span>
+              </label>
             </CardContent>
 
             <CardFooter className="flex flex-col gap-4">
