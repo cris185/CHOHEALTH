@@ -13,6 +13,7 @@ Language: **English** | [Espanol](README.es.md)
 ![PayPal](https://img.shields.io/badge/PayPal-Payments-003087?logo=paypal&logoColor=white)
 ![JWT](https://img.shields.io/badge/Auth-JWT-000000)
 ![Medplum](https://img.shields.io/badge/Medplum-FHIR%20Messaging-0066CC)
+![Jitsi](https://img.shields.io/badge/Jitsi%20Meet-Video%20Calls-1D76BA)
 ![Expo](https://img.shields.io/badge/Expo-Courier%20App-000020?logo=expo&logoColor=white)
 
 ---
@@ -25,14 +26,15 @@ Language: **English** | [Espanol](README.es.md)
 4. [System architecture](#system-architecture)
 5. [Secure messaging (Medplum)](#secure-messaging-medplum)
 6. [Real-time delivery tracking](#real-time-delivery-tracking)
-7. [Database schema](#database-schema)
-8. [Capabilities by role](#capabilities-by-role)
-9. [Known limitations and simulated behavior](#known-limitations-and-simulated-behavior)
-10. [Tech stack](#tech-stack)
-11. [Roadmap](#roadmap)
-12. [Getting started](#getting-started)
-13. [Acknowledgments](#acknowledgments)
-14. [Disclaimer](#disclaimer)
+7. [Video consultations (Jitsi Meet)](#video-consultations-jitsi-meet)
+8. [Database schema](#database-schema)
+9. [Capabilities by role](#capabilities-by-role)
+10. [Known limitations and simulated behavior](#known-limitations-and-simulated-behavior)
+11. [Tech stack](#tech-stack)
+12. [Roadmap](#roadmap)
+13. [Getting started](#getting-started)
+14. [Acknowledgments](#acknowledgments)
+15. [Disclaimer](#disclaimer)
 
 ---
 
@@ -61,6 +63,7 @@ This is an active portfolio project, not a finished product — see [Roadmap](#r
 | MinIO (S3-compatible object storage) as the media backend | Self-hosted, API-compatible with the same `django-storages` S3 backend production code would use against real AWS S3 — file storage that behaves identically in local development and production without a dependency on a third-party SaaS quota. |
 | Postal (self-hosted mailer) for transactional email over SMTP | Owns the full delivery pipeline (SPF/DKIM, bounce handling, a real MTA) without depending on a third-party API's free-tier limits, on the same self-hosted infrastructure as the rest of the platform. |
 | Medplum (self-hosted, FHIR-native) for secure patient-doctor messaging, with Postgres holding only metadata | Message content and attachments are PHI and belong in a system built around FHIR's encryption, access-control and interoperability standards, not bolted onto the app's own database. Postgres (`MessageThread`/`ThreadMessage`) never stores a message body or file — only participants, timestamps and read state — so the inbox can list and sort without a Medplum round trip, and a Medplum outage never risks the app's own data. See [Secure messaging](#secure-messaging-medplum). |
+| Self-hosted Jitsi Meet (JWT-secured) for virtual appointment video calls, with the room name derived instead of stored | No third-party video SaaS, no per-minute billing, and nothing that grants room access lives in the database — the room name is recomputed server-side from the appointment's `sid` and a secret salt on every request, so knowing the (already-public) `sid` alone is not enough to join. See [Video consultations](#video-consultations-jitsi-meet). |
 | Native `fetch` wrapper (`src/lib/api.ts`) instead of a heavier HTTP client on the frontend | One place to attach the JWT bearer token, the `Accept-Language` header, and multipart handling — no extra runtime dependency for what is a thin, predictable API layer. |
 | Next.js App Router with role-scoped route trees (`/dashboard/doctor`, `/dashboard/patient`, `/dashboard/delivery`, `/dashboard/admin`) | File-system routing maps directly onto each very different user journey, and each dashboard tree ships only the components its role needs. |
 | A separate Expo (React Native) app for the courier role, instead of a browser tab | Background GPS tracking with the app backgrounded or the phone locked is unreliable-to-impossible from a browser's Geolocation API, but is a first-class native capability (`expo-location` background tasks). The courier's web dashboard is intentionally read-only (history, stats, profile) — every action that depends on live location happens only in the native app. See [Real-time delivery tracking](#real-time-delivery-tracking). |
@@ -84,7 +87,8 @@ The rules below are enforced in code (model constraints, `clean()` validators, o
 **Clinical records and consultation workflow**
 - A medical record is created at most once per appointment and is the anchor for any prescription or lab order tied to that visit.
 - A prescription line can point to a catalog medication or be free text — a doctor is not blocked from prescribing something outside the hospital's own formulary.
-- A doctor can only move an appointment along a fixed status graph: `Confirmed` → `In Progress`, `Completed`, `Cancelled` or `No Show`; `In Progress` → `Completed` or `Cancelled`. Any other transition is rejected. A virtual appointment cannot move to `In Progress` without a meeting link set first.
+- A doctor can only move an appointment along a fixed status graph: `Confirmed` → `In Progress`, `Completed`, `Cancelled` or `No Show`; `In Progress` → `Completed` or `Cancelled`. Any other transition is rejected.
+- A virtual appointment's meeting link and Jitsi room are generated automatically the moment payment confirms it — never something a doctor supplies by hand — and a join token is minted per participant, per request, only within a time window around the scheduled visit (see [Video consultations](#video-consultations-jitsi-meet)).
 - Closing a consultation is a single atomic action: it creates the medical record and, in the same request, an optional prescription and/or lab order together. It cannot be run twice on the same appointment, and none of those three records can be edited or deleted afterward through the API — from the API's perspective, a patient's clinical history is append-only.
 
 **Pharmacy and prescription fulfillment**
@@ -156,6 +160,7 @@ flowchart LR
     POSTAL[["Postal<br/>self-hosted SMTP"]]
     MEDPLUM[("Medplum<br/>self-hosted FHIR server<br/>Communication / Binary resources")]
     NOMINATIM[["Nominatim (OpenStreetMap)<br/>address search / geocoding"]]
+    JITSI[("Jitsi Meet<br/>self-hosted video, JWT-secured")]
 
     FE -->|"REST, JWT bearer token"| AUTH
     FE --> DOC
@@ -164,6 +169,7 @@ flowchart LR
     FE --> BILL
     FE --> ADMIN
     FE -->|"search / reverse geocode<br/>(browser, address picker)"| NOMINATIM
+    FE -->|"join room with a signed,<br/>per-participant JWT"| JITSI
     MOBILE -->|"REST, JWT bearer token"| AUTH
     MOBILE --> DELIV
     MOBILE -->|"start-transit / arrived"| BASE
@@ -233,6 +239,22 @@ Pharmacy delivery used to be simulated — `MedicineDelivery.stage` advanced thr
 **What the patient sees.** The tracking page stays a plain-text stepper (`picked_up` → `on_the_way` → `delivered`) until the courier starts transit — no map, nothing to show yet. Once they're on the way, a live map (`react-leaflet` + OpenStreetMap tiles, no API key) appears with the courier's position and the confirmed delivery pin; if the courier's last ping goes stale (>60s), the UI says so explicitly ("last known location N minutes ago") instead of silently freezing the pin in place.
 
 **What's still a known gap, not a limitation of the design:** the Expo app hasn't been linked to an EAS project yet, so push notifications aren't live in production — the 5-second poll on the courier's home screen is the fallback and makes the app fully usable without push, just not instant. Setting up `eas build`/`eas submit` for a real installable app (instead of Expo Go) is the natural next step.
+
+---
+
+## Video consultations (Jitsi Meet)
+
+A virtual appointment used to be virtual in name only: `Appointment.meeting_link` existed as a field from day one, but nothing ever set it — a doctor had to go create a room in an outside tool and paste the URL in by hand before the call could start, with no verification that the link even worked. It's now a real, self-hosted video call: [Jitsi Meet](https://github.com/jitsi/docker-jitsi-meet), deployed on the same VPS as the rest of the platform, with the room generated and secured automatically.
+
+**The link is generated the moment payment confirms the appointment, not when the call starts.** `ensure_meeting_link()` runs inside the same atomic transaction that flips a paid appointment to `Confirmed` (`billing/payment_views.py`) — no dependency on the doctor remembering to do anything, and no network dependency on Jitsi itself being reachable at that instant, since generating the link is pure local computation (see the next point). Both patient and doctor see a "Join consultation" button on the appointment as soon as it's paid, well before the visit starts.
+
+**The stored link is a CHOHEALTH URL, not a Jitsi URL — deliberately.** Jitsi is configured with JWT authentication (`ENABLE_AUTH=1`, `AUTH_TYPE=jwt`, guests disabled), so nobody can join a room without a valid signed token, even with the URL in hand — which means a plain link straight to Jitsi would stop working the moment auth is on: it always needs a fresh, per-user, signed token appended, and a token is a bad thing to persist in a database column, since it expires and is bound to one identity. So `meeting_link` actually points at `/join/<sid>` on the CHOHEALTH frontend; that page authenticates the visitor, confirms they're the patient or the doctor on that specific appointment, and only then calls `GET /appointments/<sid>/meeting-token/` to mint a short-lived (2-hour) token and redirect straight into the room.
+
+**Room names are derived, never stored.** The Jitsi room itself is `cho-<hmac-sha256(appointment.sid)[:32]>`, computed on demand from a server-side salt rather than persisted anywhere — so the appointment's public `sid`, which already appears in URLs and API payloads, is never reused as something that grants access on its own. Knowing the sid gets you nowhere without also holding a valid, freshly-signed token.
+
+**Who can join, and when.** The token endpoint checks three things before it signs anything: the requester is the patient or the doctor on that exact appointment (`403` otherwise), the appointment is `Confirmed` or `In Progress` (not `Cancelled`, `Completed`, or still `Unpaid`), and the current time falls inside a window around the scheduled slot — 15 minutes before, through the service's duration, plus a 60-minute grace period after. Outside that window the endpoint returns `403` with an `available_from` timestamp instead of a token, and the join page surfaces that instead of a dead button. The doctor is always signed into the room as a Jitsi moderator; the patient never is.
+
+**What's still a known gap:** the appointment-confirmation email doesn't carry the meeting link yet — only the "virtual visit started" email does, fired when the doctor flips the appointment to `In Progress` (see the notification table in [Capabilities by role](#capabilities-by-role)). The link is already visible in-app well before that email would fire, so this is a smaller gap than it sounds, but a natural next step.
 
 ---
 
@@ -600,6 +622,7 @@ Being upfront about what's a deliberate demo-scope simplification versus a real 
 - An S3-compatible object store for media (MinIO or AWS S3)
 - An SMTP server for transactional email (self-hosted [Postal](https://github.com/postalserver/postal) in production; any SMTP server works locally)
 - A [Medplum](https://github.com/medplum/medplum) instance for secure messaging — optional locally, the feature degrades cleanly when `MEDPLUM_ENABLED=False` (see [Known limitations](#known-limitations-and-simulated-behavior))
+- A self-hosted [Jitsi Meet](https://github.com/jitsi/docker-jitsi-meet) instance with JWT auth configured, for video consultations — `JITSI_APP_SECRET` just needs to match what your Jitsi deployment is configured with (see [Video consultations](#video-consultations-jitsi-meet))
 - PostgreSQL (optional locally — falls back to SQLite if `DATABASE_URL` is unset)
 
 ### Backend
@@ -661,6 +684,13 @@ MEDPLUM_ENABLED=False           # set True once a Medplum instance is reachable
 MEDPLUM_BASE_URL=
 MEDPLUM_CLIENT_ID=
 MEDPLUM_CLIENT_SECRET=
+
+JITSI_BASE_URL=                 # e.g. https://meet.example.com
+JITSI_APP_ID=
+JITSI_APP_SECRET=               # must match your Jitsi deployment's JWT_APP_SECRET
+JITSI_JWT_AUDIENCE=jitsi
+JITSI_JWT_SUB=                  # your Jitsi domain
+JITSI_JWT_TTL_MINUTES=120
 ```
 
 ### Frontend

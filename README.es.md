@@ -13,6 +13,7 @@ Idioma: [English](README.md) | **Español**
 ![PayPal](https://img.shields.io/badge/PayPal-Pagos-003087?logo=paypal&logoColor=white)
 ![JWT](https://img.shields.io/badge/Auth-JWT-000000)
 ![Medplum](https://img.shields.io/badge/Medplum-Mensajer%C3%ADa%20FHIR-0066CC)
+![Jitsi](https://img.shields.io/badge/Jitsi%20Meet-Videollamadas-1D76BA)
 ![Expo](https://img.shields.io/badge/Expo-App%20de%20Reparto-000020?logo=expo&logoColor=white)
 
 ---
@@ -25,14 +26,15 @@ Idioma: [English](README.md) | **Español**
 4. [Arquitectura del sistema](#arquitectura-del-sistema)
 5. [Mensajería segura (Medplum)](#mensajería-segura-medplum)
 6. [Seguimiento de entregas en tiempo real](#seguimiento-de-entregas-en-tiempo-real)
-7. [Esquema de base de datos](#esquema-de-base-de-datos)
-8. [Capacidades por rol](#capacidades-por-rol)
-9. [Limitaciones conocidas y comportamiento simulado](#limitaciones-conocidas-y-comportamiento-simulado)
-10. [Stack tecnológico](#stack-tecnológico)
-11. [Roadmap](#roadmap)
-12. [Puesta en marcha](#puesta-en-marcha)
-13. [Agradecimientos](#agradecimientos)
-14. [Aviso](#aviso)
+7. [Videoconsultas (Jitsi Meet)](#videoconsultas-jitsi-meet)
+8. [Esquema de base de datos](#esquema-de-base-de-datos)
+9. [Capacidades por rol](#capacidades-por-rol)
+10. [Limitaciones conocidas y comportamiento simulado](#limitaciones-conocidas-y-comportamiento-simulado)
+11. [Stack tecnológico](#stack-tecnológico)
+12. [Roadmap](#roadmap)
+13. [Puesta en marcha](#puesta-en-marcha)
+14. [Agradecimientos](#agradecimientos)
+15. [Aviso](#aviso)
 
 ---
 
@@ -61,6 +63,7 @@ Este es un proyecto de portafolio activo, no un producto terminado — ver [Road
 | MinIO (almacenamiento de objetos compatible con S3) como backend de medios | Self-hosted, compatible por API con el mismo backend S3 de `django-storages` que el código de producción usaría contra AWS S3 real — almacenamiento de archivos que se comporta igual en desarrollo local y en producción, sin depender de la cuota gratuita de un SaaS externo. |
 | Postal (mailer self-hosted) para correo transaccional vía SMTP | Es dueño de todo el pipeline de entrega (SPF/DKIM, manejo de rebotes, un MTA real) sin depender de los límites de la capa gratuita de una API de terceros, en la misma infraestructura self-hosted que el resto de la plataforma. |
 | Medplum (self-hosted, nativo en FHIR) para mensajería segura paciente-doctor, con Postgres guardando solo metadata | El contenido de los mensajes y los adjuntos son PHI y pertenecen a un sistema construido alrededor de los estándares de cifrado, control de acceso e interoperabilidad de FHIR, no atornillados a la base de datos propia de la app. Postgres (`MessageThread`/`ThreadMessage`) nunca guarda el cuerpo de un mensaje ni un archivo — solo participantes, marcas de tiempo y estado de lectura — de modo que la bandeja puede listar y ordenar sin un viaje de red a Medplum, y una caída de Medplum nunca pone en riesgo los datos propios de la app. Ver [Mensajería segura](#mensajería-segura-medplum). |
+| Jitsi Meet self-hosted (asegurado con JWT) para las videollamadas de las citas virtuales, con el nombre de la sala derivado en vez de guardado | Sin SaaS de video de terceros, sin cobro por minuto, y nada que otorgue acceso a la sala vive en la base de datos — el nombre de la sala se recalcula del lado del servidor a partir del `sid` de la cita y una sal secreta en cada solicitud, de modo que conocer el `sid` (ya público) por sí solo no alcanza para entrar. Ver [Videoconsultas](#videoconsultas-jitsi-meet). |
 | Wrapper nativo de `fetch` (`src/lib/api.ts`) en lugar de un cliente HTTP más pesado en el frontend | Un único lugar para adjuntar el token JWT, el header `Accept-Language`, y el manejo de multipart — sin dependencia adicional en tiempo de ejecución para lo que es una capa de API delgada y predecible. |
 | Next.js App Router con árboles de rutas por rol (`/dashboard/doctor`, `/dashboard/patient`, `/dashboard/delivery`, `/dashboard/admin`) | El enrutamiento por sistema de archivos mapea directamente cada recorrido de usuario, muy distinto entre sí, y cada árbol de dashboard envía solo los componentes que su rol necesita. |
 | Una app aparte en Expo (React Native) para el rol de repartidor, en vez de otra pestaña del navegador | El rastreo GPS en segundo plano, con la app minimizada o el teléfono bloqueado, es poco confiable o directamente imposible desde la API de Geolocation de un navegador, pero es una capacidad nativa de primera clase (tareas en segundo plano de `expo-location`). El dashboard web del repartidor es deliberadamente de solo lectura (historial, estadísticas, perfil) — toda acción que depende de la ubicación en vivo ocurre únicamente en la app nativa. Ver [Seguimiento de entregas en tiempo real](#seguimiento-de-entregas-en-tiempo-real). |
@@ -84,7 +87,8 @@ Las reglas siguientes están implementadas en código (restricciones de modelo, 
 **Historiales clínicos y flujo de consulta**
 - Se crea como máximo un historial médico por cita, y es el punto de anclaje de cualquier receta u orden de laboratorio ligada a esa consulta.
 - Una línea de receta puede apuntar a un medicamento del catálogo o ser texto libre — un doctor no está limitado a recetar solo lo que existe en el formulario propio del hospital.
-- Un doctor solo puede mover una cita a través de un grafo de estados fijo: `Confirmed` → `In Progress`, `Completed`, `Cancelled` o `No Show`; `In Progress` → `Completed` o `Cancelled`. Cualquier otra transición se rechaza. Una cita virtual no puede pasar a `In Progress` sin antes fijar un enlace de videollamada.
+- Un doctor solo puede mover una cita a través de un grafo de estados fijo: `Confirmed` → `In Progress`, `Completed`, `Cancelled` o `No Show`; `In Progress` → `Completed` o `Cancelled`. Cualquier otra transición se rechaza.
+- El enlace de reunión y la sala de Jitsi de una cita virtual se generan automáticamente en el momento en que el pago la confirma — nunca es algo que el doctor tenga que proporcionar a mano — y se emite un token de acceso por participante, por solicitud, solo dentro de una ventana de tiempo alrededor de la cita agendada (ver [Videoconsultas](#videoconsultas-jitsi-meet)).
 - Cerrar una consulta es una sola acción atómica: crea el historial médico y, en la misma solicitud, opcionalmente una receta y/u orden de laboratorio juntos. No puede ejecutarse dos veces sobre la misma cita, y ninguno de esos tres registros puede editarse ni borrarse después vía API — desde la perspectiva de la API, el historial clínico de un paciente es de solo-agregar.
 
 **Farmacia y cumplimiento de recetas**
@@ -156,6 +160,7 @@ flowchart LR
     POSTAL[["Postal<br/>SMTP self-hosted"]]
     MEDPLUM[("Medplum<br/>servidor FHIR self-hosted<br/>recursos Communication / Binary")]
     NOMINATIM[["Nominatim (OpenStreetMap)<br/>búsqueda de direcciones / geocodificación"]]
+    JITSI[("Jitsi Meet<br/>video self-hosted, asegurado con JWT")]
 
     FE -->|"REST, token JWT bearer"| AUTH
     FE --> DOC
@@ -164,6 +169,7 @@ flowchart LR
     FE --> BILL
     FE --> ADMIN
     FE -->|"búsqueda / geocodificación inversa<br/>(navegador, selector de dirección)"| NOMINATIM
+    FE -->|"unirse a la sala con un JWT<br/>firmado por participante"| JITSI
     MOBILE -->|"REST, token JWT bearer"| AUTH
     MOBILE --> DELIV
     MOBILE -->|"iniciar tránsito / llegada"| BASE
@@ -233,6 +239,22 @@ La entrega de farmacia solía estar simulada — `MedicineDelivery.stage` avanza
 **Qué ve el paciente.** La página de seguimiento se mantiene como un stepper de solo texto (`picked_up` → `on_the_way` → `delivered`) hasta que el repartidor inicia el tránsito — sin mapa, no hay nada que mostrar todavía. Una vez que está en camino, aparece un mapa en vivo (`react-leaflet` + tiles de OpenStreetMap, sin API key) con la posición del repartidor y el pin de entrega confirmado; si el último ping del repartidor se vuelve obsoleto (>60s), la interfaz lo dice explícitamente ("última ubicación conocida hace N minutos") en vez de dejar el pin congelado en su lugar sin avisar.
 
 **Lo que sigue siendo un hueco conocido, no una limitación de diseño:** la app de Expo todavía no está vinculada a un proyecto de EAS, así que las notificaciones push no están activas en producción — el polling cada 5 segundos en la pantalla principal del repartidor es el respaldo y hace que la app sea completamente usable sin push, solo que no instantánea. Configurar `eas build`/`eas submit` para tener una app instalable de verdad (en vez de Expo Go) es el siguiente paso natural.
+
+---
+
+## Videoconsultas (Jitsi Meet)
+
+Una cita virtual solía ser virtual solo de nombre: el campo `Appointment.meeting_link` existía desde el primer día, pero nada lo llenaba nunca — el doctor tenía que ir a crear una sala en una herramienta externa y pegar la URL a mano antes de poder iniciar la llamada, sin ninguna verificación de que el enlace siquiera funcionara. Ahora es una videollamada real y self-hosted: [Jitsi Meet](https://github.com/jitsi/docker-jitsi-meet), desplegado en la misma VPS que el resto de la plataforma, con la sala generada y asegurada automáticamente.
+
+**El enlace se genera en el momento en que el pago confirma la cita, no cuando empieza la llamada.** `ensure_meeting_link()` corre dentro de la misma transacción atómica que pasa una cita pagada a `Confirmed` (`billing/payment_views.py`) — sin depender de que el doctor se acuerde de hacer algo, y sin depender de red de que Jitsi esté disponible en ese instante, ya que generar el enlace es puro cómputo local (ver el siguiente punto). Tanto el paciente como el doctor ven un botón "Unirse a la consulta" en la cita apenas queda pagada, mucho antes de que empiece la visita.
+
+**El enlace guardado es una URL de CHOHEALTH, no una URL de Jitsi — a propósito.** Jitsi está configurado con autenticación JWT (`ENABLE_AUTH=1`, `AUTH_TYPE=jwt`, invitados deshabilitados), así que nadie puede entrar a una sala sin un token firmado válido, aunque tenga la URL en mano — lo cual significa que un enlace directo a Jitsi dejaría de funcionar en cuanto la autenticación está activa: siempre necesita un token firmado, fresco y por usuario, agregado al final, y un token es algo malo para guardar en una columna de base de datos, ya que expira y está atado a una sola identidad. Por eso `meeting_link` en realidad apunta a `/join/<sid>` en el frontend de CHOHEALTH; esa página autentica al visitante, confirma que es el paciente o el doctor de esa cita específica, y solo entonces llama a `GET /appointments/<sid>/meeting-token/` para generar un token de corta duración (2 horas) y redirigir directo a la sala.
+
+**Los nombres de sala se derivan, nunca se guardan.** La sala de Jitsi propiamente es `cho-<hmac-sha256(appointment.sid)[:32]>`, calculada bajo demanda a partir de una sal del lado del servidor en vez de persistida en algún lado — de modo que el `sid` público de la cita, que ya aparece en URLs y payloads de la API, nunca se reutiliza como algo que por sí solo otorgue acceso. Conocer el sid no lleva a ningún lado sin además tener un token firmado y vigente.
+
+**Quién puede entrar, y cuándo.** El endpoint del token verifica tres cosas antes de firmar nada: que quien solicita es el paciente o el doctor de esa cita exacta (`403` en caso contrario), que la cita está `Confirmed` o `In Progress` (no `Cancelled`, `Completed`, ni todavía `Unpaid`), y que la hora actual cae dentro de una ventana alrededor del horario agendado — 15 minutos antes, durante la duración del servicio, más 60 minutos de margen después. Fuera de esa ventana el endpoint devuelve `403` con un timestamp `available_from` en vez de un token, y la página de unión muestra eso en vez de un botón muerto. El doctor siempre entra a la sala como moderador de Jitsi; el paciente nunca.
+
+**Lo que sigue siendo un hueco conocido:** el correo de confirmación de la cita todavía no lleva el enlace de la reunión — solo lo lleva el correo de "consulta virtual iniciada", que se dispara cuando el doctor pasa la cita a `In Progress` (ver la tabla de notificaciones en [Capacidades por rol](#capacidades-por-rol)). El enlace ya es visible en la app mucho antes de que ese correo se dispare, así que es un hueco más pequeño de lo que suena, pero un siguiente paso natural.
 
 ---
 
@@ -600,6 +622,7 @@ Siendo transparente sobre qué es una simplificación deliberada de alcance de d
 - Un almacenamiento de objetos compatible con S3 para medios (MinIO o AWS S3)
 - Un servidor SMTP para correo transaccional (self-hosted [Postal](https://github.com/postalserver/postal) en producción; cualquier SMTP funciona en local)
 - Una instancia de [Medplum](https://github.com/medplum/medplum) para mensajería segura — opcional en local, la función se desactiva de forma limpia con `MEDPLUM_ENABLED=False` (ver [Limitaciones conocidas](#limitaciones-conocidas-y-comportamiento-simulado))
+- Una instancia self-hosted de [Jitsi Meet](https://github.com/jitsi/docker-jitsi-meet) con autenticación JWT configurada, para las videoconsultas — `JITSI_APP_SECRET` solo necesita coincidir con lo configurado en tu despliegue de Jitsi (ver [Videoconsultas](#videoconsultas-jitsi-meet))
 - PostgreSQL (opcional en local — usa SQLite como fallback si `DATABASE_URL` no está definida)
 
 ### Backend
@@ -661,6 +684,13 @@ MEDPLUM_ENABLED=False           # poner True cuando haya una instancia de Medplu
 MEDPLUM_BASE_URL=
 MEDPLUM_CLIENT_ID=
 MEDPLUM_CLIENT_SECRET=
+
+JITSI_BASE_URL=                 # ej. https://meet.ejemplo.com
+JITSI_APP_ID=
+JITSI_APP_SECRET=               # debe coincidir con el JWT_APP_SECRET de tu despliegue de Jitsi
+JITSI_JWT_AUDIENCE=jitsi
+JITSI_JWT_SUB=                  # tu dominio de Jitsi
+JITSI_JWT_TTL_MINUTES=120
 ```
 
 ### Frontend
