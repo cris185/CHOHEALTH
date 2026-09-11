@@ -1,7 +1,7 @@
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, Alert, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
+  ActivityIndicator, Alert, Linking, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/context/AuthContext';
@@ -171,6 +171,18 @@ export default function HomeScreen() {
     }
   };
 
+  const handleNavigate = (delivery: DeliveryHistoryItem) => {
+    // A destination confirmed on the patient's map picker gives exact
+    // coordinates; falling back to the address text still lets Maps geocode
+    // it itself on the rare delivery that somehow skipped the picker.
+    const destination = delivery.dest_lat != null && delivery.dest_lng != null
+      ? `${delivery.dest_lat},${delivery.dest_lng}`
+      : encodeURIComponent(delivery.address);
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${destination}`).catch(() => {
+      Alert.alert('Could not open Maps', 'No maps app was found to handle navigation.');
+    });
+  };
+
   const handleStartTransit = async () => {
     if (!token || !activeDelivery) return;
     setBusy(true);
@@ -236,6 +248,9 @@ export default function HomeScreen() {
             <Text style={styles.cardLabel}>Current delivery</Text>
             <Text style={styles.cardAddress}>{activeDelivery.address}</Text>
             <Text style={styles.cardStage}>{activeDelivery.stage === 'picked_up' ? 'Picked up — ready to go' : 'On the way'}</Text>
+            <Pressable style={[styles.button, styles.buttonSecondary, styles.navigateButton]} onPress={() => handleNavigate(activeDelivery)}>
+              <Text style={styles.buttonTextSecondary}>🧭 Navigate</Text>
+            </Pressable>
             {activeDelivery.stage === 'picked_up' && (
               <Pressable style={[styles.button, styles.buttonPrimary]} onPress={handleStartTransit} disabled={busy}>
                 <Text style={styles.buttonText}>Start Transit</Text>
@@ -324,6 +339,7 @@ const styles = StyleSheet.create({
   buttonPrimary: { backgroundColor: Colors.primary },
   buttonAccent: { backgroundColor: Colors.accent },
   buttonSecondary: { backgroundColor: Colors.border },
+  navigateButton: { marginBottom: 10 },
   buttonDanger: { backgroundColor: Colors.danger },
   buttonText: { color: '#fff', fontSize: 15, fontWeight: '700' },
   buttonTextSecondary: { color: Colors.text, fontSize: 15, fontWeight: '700' },

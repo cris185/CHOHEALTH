@@ -104,7 +104,7 @@ The rules below are enforced in code (model constraints, `clean()` validators, o
 - A courier's shift status (`off_duty` / `on_duty` / `on_break`) gates whether the assignment algorithm considers them a candidate at all — an off-duty or on-break courier is never offered a delivery.
 - A courier cannot start a break, or clock out, while a delivery is actively assigned to them (any stage before `delivered`). One delivery at a time, start to finish, before the next shift-state change is allowed.
 - A delivery offer expires 45 seconds after it's made if the courier doesn't respond; a decline or an expiry both cascade to the next-closest available courier, never back to someone who already saw that same delivery.
-- The "arrived" geofence check is a soft warning, not a hard block — it still marks the delivery `delivered` either way. A GPS fix (courier or geocoder) can be off by enough to produce a false negative, and a courier who is genuinely there shouldn't be stuck unable to close out a delivery.
+- The "arrived" geofence check blocks confirmation outright when the courier's GPS is clearly outside `MAX_GEOFENCE_METERS` (150m) of the confirmed delivery point — the response includes the actual distance so the courier knows how far off they are. It only skips the check (never blocks) when there's no destination coordinate to compare against at all, rather than stranding the delivery on a technicality.
 - Proof of delivery requires both a photo and the courier's GPS position at that exact moment — neither alone is accepted.
 
 **Reviews**

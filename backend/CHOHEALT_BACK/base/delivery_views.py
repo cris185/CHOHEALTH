@@ -277,9 +277,12 @@ class DeliveryStartTransitView(APIView):
 class DeliveryArrivedView(APIView):
     """The assigned courier taps "Arrived" — on_the_way -> delivered.
     Requires a proof photo; the courier's current GPS position is checked
-    against the delivery address (soft geofence — logged, not a hard block,
-    since a bad GPS fix shouldn't strand a courier who's genuinely there) and
-    saved as delivery proof alongside the photo.
+    against the confirmed delivery point and BLOCKS the confirmation if
+    they're clearly too far away (explicit product decision — a courier who
+    really is there can always just walk closer and retry). Only blocks on a
+    definite "too far" reading — if there's no destination coordinate to
+    check against at all, it's let through rather than stranding the
+    delivery on a technicality.
     """
     permission_classes = [IsDeliveryPerson]
     parser_classes = [MultiPartParser]
@@ -313,6 +316,15 @@ class DeliveryArrivedView(APIView):
         if delivery.dest_latitude is not None and delivery.dest_longitude is not None:
             distance_m = haversine_km(lat, lng, delivery.dest_latitude, delivery.dest_longitude) * 1000
             within_geofence = distance_m <= MAX_GEOFENCE_METERS
+            if not within_geofence:
+                return Response(
+                    {
+                        'detail': f"You're about {distance_m / 1000:.1f} km from the delivery address — "
+                                  f'get within {MAX_GEOFENCE_METERS}m to confirm arrival.',
+                        'distance_m': round(distance_m),
+                    },
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
 
         delivery.stage = 'delivered'
         delivery.delivered_at = timezone.now()

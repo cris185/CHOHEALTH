@@ -188,6 +188,8 @@ class MyDeliveriesView(APIView):
                 'order_sid': d.order.sid,
                 'stage': d.stage,
                 'address': d.address,
+                'dest_lat': d.dest_latitude,
+                'dest_lng': d.dest_longitude,
                 'created_at': d.created_at.isoformat(),
                 'delivered_at': d.delivered_at.isoformat() if d.delivered_at else None,
             }

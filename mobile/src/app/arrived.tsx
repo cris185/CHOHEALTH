@@ -33,19 +33,16 @@ export default function ArrivedScreen() {
     setSubmitting(true);
     try {
       const position = await getCurrentPosition();
-      const res = await deliveryActions.arrived(
+      await deliveryActions.arrived(
         deliverySid,
         { latitude: position.latitude, longitude: position.longitude, photoUri },
         token,
       );
-      if (res.within_geofence === false) {
-        Alert.alert(
-          "You're a bit far from the delivery address",
-          "We've still marked it delivered, but your position and the address don't quite match. Make sure this is right.",
-        );
-      }
       router.replace('/home');
     } catch (err: unknown) {
+      // A too-far geofence reading lands here too (backend now blocks it,
+      // 400 with a distance in the message) — the photo stays in state so
+      // retrying after walking closer doesn't require retaking it.
       const e = err as { data?: { detail?: string }; message?: string };
       Alert.alert('Could not confirm delivery', e?.data?.detail ?? e?.message ?? 'Please try again.');
     } finally {

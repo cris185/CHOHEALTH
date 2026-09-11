@@ -158,6 +158,8 @@ export interface DeliveryHistoryItem {
   order_sid: string;
   stage: 'picked_up' | 'on_the_way' | 'delivered';
   address: string;
+  dest_lat: number | null;
+  dest_lng: number | null;
   created_at: string;
   delivered_at: string | null;
 }
