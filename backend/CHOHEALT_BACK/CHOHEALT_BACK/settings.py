@@ -300,6 +300,9 @@ JITSI_JWT_AUDIENCE = os.getenv('JITSI_JWT_AUDIENCE', 'jitsi')
 JITSI_JWT_SUB = os.getenv('JITSI_JWT_SUB', 'meet.cristianpuentes.com')
 JITSI_JWT_TTL_MINUTES = int(os.getenv('JITSI_JWT_TTL_MINUTES', '120'))
 JITSI_ROOM_SALT = os.getenv('JITSI_ROOM_SALT', SECRET_KEY)
+# Temporary testing escape hatch — skips the "only around appointment time"
+# window on the join-token endpoint. Meant to be turned back off afterwards.
+JITSI_SKIP_TIME_WINDOW = os.getenv('JITSI_SKIP_TIME_WINDOW', 'False') == 'True'
 
 # Medplum (FHIR server, self-hosted). Disabled by default so local dev / CI
 # doesn't need a running Medplum instance — messaging endpoints degrade to

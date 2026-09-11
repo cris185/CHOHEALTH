@@ -153,7 +153,10 @@ class AppointmentMeetingTokenView(APIView):
         window_start = appointment.date - timedelta(minutes=15)
         window_end = appointment.date + timedelta(minutes=duration) + timedelta(minutes=60)
         now = timezone.now()
-        if now < window_start or now > window_end:
+        # JITSI_SKIP_TIME_WINDOW is a temporary escape hatch for testing the
+        # integration against appointments scheduled outside "right now" —
+        # off by default, meant to be flipped back off once done testing.
+        if not settings.JITSI_SKIP_TIME_WINDOW and (now < window_start or now > window_end):
             return Response({
                 'detail': 'This consultation room is not open yet.',
                 'available_from': window_start,
