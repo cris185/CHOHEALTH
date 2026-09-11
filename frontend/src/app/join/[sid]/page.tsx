@@ -44,7 +44,16 @@ export default function JoinConsultationPage() {
             <p className="mt-2 text-muted-foreground">{error}</p>
             {availableFrom && (
               <p className="mt-1 text-sm text-muted-foreground">
-                Available from {new Date(availableFrom).toLocaleString()}
+                Available from{' '}
+                {new Date(availableFrom).toLocaleString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  timeZone: 'America/New_York',
+                })}
+                {' '}(clinic time)
               </p>
             )}
             <Link href="/dashboard" className="mt-6 inline-block"><Button>Back to Dashboard</Button></Link>
