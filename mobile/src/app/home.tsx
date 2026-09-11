@@ -38,6 +38,14 @@ export default function HomeScreen() {
   const offerRef = useRef<PendingOffer | null>(null);
   useEffect(() => { offerRef.current = offer; }, [offer]);
 
+  // logout() alone just clears the session — nothing then routes away from
+  // this screen, so `user` going null left this same component stuck on its
+  // own "if (!user) show a spinner" guard below, forever.
+  const handleLogout = async () => {
+    await logout();
+    router.replace('/login');
+  };
+
   const loadAll = useCallback(async () => {
     if (!token) return;
     try {
@@ -218,7 +226,7 @@ export default function HomeScreen() {
             <Text style={styles.greeting}>{profile.full_name}</Text>
             <Text style={styles.email}>{profile.email}</Text>
           </View>
-          <Pressable onPress={logout}><Text style={styles.logout}>Log out</Text></Pressable>
+          <Pressable onPress={handleLogout}><Text style={styles.logout}>Log out</Text></Pressable>
         </View>
 
         <View style={[styles.statusPill, status === 'on_duty' && styles.statusOnDuty, status === 'on_break' && styles.statusOnBreak]}>
