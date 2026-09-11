@@ -316,7 +316,7 @@
         "deliveryAddressPlaceholder": "Busca tu direcci\u00f3n o toca el mapa...",
         "addressPickerSearching": "Buscando...",
         "addressPickerNoResults": "Sin resultados \u2014 tambi\u00e9n puedes tocar el mapa para poner el pin.",
-        "addressPickerPinPending": "Busca arriba o toca/arrastra el pin en el mapa para fijar el punto exacto de entrega.",
+        "addressPickerPinPending": "Busca arriba, o haz clic derecho en el mapa para poner un pin (luego arrástralo para ajustarlo).",
         "addressPickerPinConfirmed": "Pin definido \u2014 arr\u00e1stralo para ajustarlo.",
         "cancel": "Cancelar",
         "confirm": "Confirmar",

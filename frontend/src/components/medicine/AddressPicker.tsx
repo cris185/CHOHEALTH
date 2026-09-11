@@ -11,10 +11,39 @@ export interface AddressValue {
   lng: number | null;
 }
 
+interface NominatimAddress {
+  house_number?: string;
+  road?: string;
+  suburb?: string;
+  neighbourhood?: string;
+  quarter?: string;
+  city_district?: string;
+  city?: string;
+  town?: string;
+  village?: string;
+}
+
 interface NominatimResult {
   display_name: string;
+  address?: NominatimAddress;
   lat: string;
   lon: string;
+}
+
+// Nominatim's display_name spells out the full administrative hierarchy —
+// comuna, "Perímetro Urbano", metro area, department, the regional
+// "RAP" body, postcode, country — accurate but unreadable as a delivery
+// address. Built from the same `address` object's individual fields
+// instead: street + neighbourhood + city, the parts a person actually
+// reads. Falls back to display_name if the structured fields are missing.
+function formatAddress(result: { display_name: string; address?: NominatimAddress }): string {
+  const addr = result.address;
+  if (!addr) return result.display_name;
+  const street = [addr.road, addr.house_number].filter(Boolean).join(' ');
+  const area = addr.suburb || addr.neighbourhood || addr.quarter || addr.city_district;
+  const city = addr.city || addr.town || addr.village;
+  const parts = [street, area, city].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : result.display_name;
 }
 
 // Same free, no-API-key provider used everywhere else in this project for
@@ -54,7 +83,7 @@ export default function AddressPicker({
     if (q.trim().length < 4) { setSuggestions([]); return; }
     setSearching(true);
     try {
-      const params = new URLSearchParams({ q, format: 'json', limit: '5' });
+      const params = new URLSearchParams({ q, format: 'json', limit: '5', addressdetails: '1' });
       const res = await fetch(`${NOMINATIM_SEARCH}?${params}`, { headers: NOMINATIM_HEADERS });
       const data: NominatimResult[] = await res.json();
       setSuggestions(data);
@@ -76,8 +105,9 @@ export default function AddressPicker({
   };
 
   const pickSuggestion = (s: NominatimResult) => {
-    setQuery(s.display_name);
-    onChange({ address: s.display_name, lat: parseFloat(s.lat), lng: parseFloat(s.lon) });
+    const label = formatAddress(s);
+    setQuery(label);
+    onChange({ address: label, lat: parseFloat(s.lat), lng: parseFloat(s.lon) });
     setSuggestions([]);
     setShowSuggestions(false);
   };
@@ -85,12 +115,13 @@ export default function AddressPicker({
   const handleMapMove = async (lat: number, lng: number) => {
     onChange({ address: query, lat, lng });
     try {
-      const params = new URLSearchParams({ lat: String(lat), lon: String(lng), format: 'json' });
+      const params = new URLSearchParams({ lat: String(lat), lon: String(lng), format: 'json', addressdetails: '1' });
       const res = await fetch(`${NOMINATIM_REVERSE}?${params}`, { headers: NOMINATIM_HEADERS });
-      const data: { display_name?: string } = await res.json();
+      const data: NominatimResult = await res.json();
       if (data?.display_name) {
-        setQuery(data.display_name);
-        onChange({ address: data.display_name, lat, lng });
+        const label = formatAddress(data);
+        setQuery(label);
+        onChange({ address: label, lat, lng });
       }
     } catch {
       // Keep the coordinates even if reverse geocoding fails — the pin is
@@ -129,7 +160,7 @@ export default function AddressPicker({
                   onMouseDown={() => pickSuggestion(s)}
                   className="block w-full px-3 py-2 text-left text-xs text-gray-700 hover:bg-gray-50"
                 >
-                  {s.display_name}
+                  {formatAddress(s)}
                 </button>
               </li>
             ))}

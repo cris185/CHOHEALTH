@@ -316,7 +316,7 @@
         "deliveryAddressPlaceholder": "Search your address or tap the map...",
         "addressPickerSearching": "Searching...",
         "addressPickerNoResults": "No matches — you can also tap the map to place the pin.",
-        "addressPickerPinPending": "Search above or tap/drag the pin on the map to set the exact delivery point.",
+        "addressPickerPinPending": "Search above, or right-click the map to drop a pin (drag it after to fine-tune).",
         "addressPickerPinConfirmed": "Pin set — drag it to fine-tune.",
         "cancel": "Cancel",
         "confirm": "Confirm",

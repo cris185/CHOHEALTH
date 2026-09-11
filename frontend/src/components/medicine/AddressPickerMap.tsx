@@ -26,9 +26,12 @@ function Recenter({ center, zoom }: { center: [number, number]; zoom: number }) 
   return null;
 }
 
-function ClickToPlace({ onMove }: { onMove: (lat: number, lng: number) => void }) {
+// Right-click (not left-click) places the pin, so left-click-drag stays free
+// for panning around the map without any risk of nudging the destination.
+function RightClickToPlace({ onMove }: { onMove: (lat: number, lng: number) => void }) {
   useMapEvents({
-    click(e) {
+    contextmenu(e) {
+      e.originalEvent.preventDefault();
       onMove(e.latlng.lat, e.latlng.lng);
     },
   });
@@ -46,7 +49,7 @@ export default function AddressPickerMap({
     <MapContainer
       center={center}
       zoom={marker ? 16 : 12}
-      scrollWheelZoom={false}
+      scrollWheelZoom
       style={{ height: '220px', width: '100%', zIndex: 0 }}
     >
       <TileLayer
@@ -66,7 +69,7 @@ export default function AddressPickerMap({
           }}
         />
       )}
-      <ClickToPlace onMove={onMarkerMove} />
+      <RightClickToPlace onMove={onMarkerMove} />
       <Recenter center={center} zoom={marker ? 16 : 12} />
     </MapContainer>
   );

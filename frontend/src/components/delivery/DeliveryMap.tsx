@@ -50,7 +50,7 @@ export default function DeliveryMap({
     <MapContainer
       center={[lat, lng]}
       zoom={15}
-      scrollWheelZoom={false}
+      scrollWheelZoom
       style={{ height: '280px', width: '100%', borderRadius: '0.75rem', zIndex: 0 }}
     >
       <style>{'.delivery-map-destination-pin { filter: hue-rotate(150deg) saturate(4); }'}</style>
