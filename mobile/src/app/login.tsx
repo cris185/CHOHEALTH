@@ -1,3 +1,4 @@
+import { Feather } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import {
@@ -60,8 +61,13 @@ export default function LoginScreen() {
               secureTextEntry={!showPassword}
               placeholder="••••••••"
             />
-            <Pressable style={styles.eyeButton} onPress={() => setShowPassword((v) => !v)} hitSlop={10}>
-              <Text style={styles.eyeIcon}>{showPassword ? '🙈' : '👁️'}</Text>
+            <Pressable
+              style={styles.eyeButton}
+              onPress={() => setShowPassword((v) => !v)}
+              hitSlop={10}
+              accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+            >
+              <Feather name={showPassword ? 'eye-off' : 'eye'} size={18} color={Colors.textMuted} />
             </Pressable>
           </View>
 
@@ -88,7 +94,6 @@ const styles = StyleSheet.create({
   passwordRow: { position: 'relative', justifyContent: 'center' },
   passwordInput: { paddingRight: 44 },
   eyeButton: { position: 'absolute', right: 10, padding: 6 },
-  eyeIcon: { fontSize: 18 },
   button: {
     marginTop: 28, backgroundColor: Colors.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center',
   },
